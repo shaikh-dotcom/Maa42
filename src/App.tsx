@@ -52,6 +52,9 @@ export const App: React.FC = () => {
     authLoading,
     signUp,
     signIn,
+    requestPasswordReset,
+    verifyResetCode,
+    resetPassword,
     signOutUser,
     persistProfile,
     logKickSession,
@@ -62,12 +65,14 @@ export const App: React.FC = () => {
   const [currentScreen, setCurrentScreen] = useState<ScreenId>("landing");
   const [screenLoading, setScreenLoading] = useState(false);
   const [isInitialLoading, setIsInitialLoading] = useState(true);
+  const [didInitialAuthRedirect, setDidInitialAuthRedirect] = useState(false);
   const [showSyncLoader, setShowSyncLoader] = useState(false);
 
   // Modal states
   const [authModal, setAuthModal] = useState<{
     isOpen: boolean;
-    mode: "signin" | "signup";
+    mode: "signin" | "signup" | "forgot" | "reset";
+    resetCode?: string;
   }>({
     isOpen: false,
     mode: "signin",
@@ -117,10 +122,30 @@ export const App: React.FC = () => {
   // Once a signed-in user's profile is ready, drop them straight into the
   // dashboard instead of the marketing landing page.
   useEffect(() => {
-    if (!authLoading && currentUser && profile && currentScreen === "landing") {
+    if (
+      !didInitialAuthRedirect &&
+      !authLoading &&
+      currentUser &&
+      profile &&
+      currentScreen === "landing"
+    ) {
       setCurrentScreen("home");
+      setDidInitialAuthRedirect(true);
     }
-  }, [authLoading, currentUser, profile]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [authLoading, currentUser, profile, currentScreen, didInitialAuthRedirect]);
+
+  // Handle Firebase Auth email reset links (mode=resetPassword&oobCode=...).
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const mode = params.get("mode");
+    const oobCode = params.get("oobCode");
+
+    if (mode === "resetPassword" && oobCode) {
+      setAuthModal({ isOpen: true, mode: "reset", resetCode: oobCode });
+      setCurrentScreen("landing");
+      window.history.replaceState({}, "", window.location.pathname);
+    }
+  }, []);
 
   // Signed-out users can browse the landing page freely, but every other
   // screen requires an authenticated + loaded profile — this is the single
@@ -152,6 +177,10 @@ export const App: React.FC = () => {
 
   const handleSignOut = () => {
     signOutUser();
+    setCurrentScreen("landing");
+  };
+
+  const handleGoToLanding = () => {
     setCurrentScreen("landing");
   };
 
@@ -220,7 +249,7 @@ export const App: React.FC = () => {
           onOpenSos={() => setSosModal({ isOpen: true, initialTab: "hotline" })}
           onOpenProfile={() => setProfileModalOpen(true)}
           onOpenNotifications={() => setNotificationsOpen(true)}
-          onGoToLanding={handleSignOut}
+          onGoToLanding={handleGoToLanding}
           onTriggerLoadingScreen={() => setShowSyncLoader(true)}
         />
       ) : (
@@ -234,13 +263,22 @@ export const App: React.FC = () => {
           </div>
           <div className="flex items-center gap-2">
             {currentUser ? (
-              <motion.button
-                whileTap={{ scale: 0.95 }}
-                onClick={() => handleNavigate("home")}
-                className="text-xs font-semibold bg-primary text-on-primary hover:bg-primary-container px-4 py-1.5 rounded-full transition-all shadow-sm cursor-pointer"
-              >
-                Go to Dashboard
-              </motion.button>
+              <>
+                <motion.button
+                  whileTap={{ scale: 0.95 }}
+                  onClick={() => handleNavigate("home")}
+                  className="text-xs font-semibold bg-primary text-on-primary hover:bg-primary-container px-4 py-1.5 rounded-full transition-all shadow-sm cursor-pointer"
+                >
+                  Enter Dashboard
+                </motion.button>
+                <motion.button
+                  whileTap={{ scale: 0.95 }}
+                  onClick={() => handleNavigate("home")}
+                  className="text-xs font-semibold text-primary hover:text-primary-container px-3 py-1.5 rounded-full transition-colors cursor-pointer"
+                >
+                  Get Started
+                </motion.button>
+              </>
             ) : (
               <>
                 <motion.button
@@ -290,6 +328,7 @@ export const App: React.FC = () => {
                 >
                   <LandingScreen
                     onNavigate={handleNavigate}
+                    isAuthenticated={Boolean(currentUser && profile)}
                     onOpenSignIn={() =>
                       setAuthModal({ isOpen: true, mode: "signin" })
                     }
@@ -414,6 +453,10 @@ export const App: React.FC = () => {
         initialMode={authModal.mode}
         onSignIn={signIn}
         onSignUp={signUp}
+        onRequestPasswordReset={requestPasswordReset}
+        onVerifyResetCode={verifyResetCode}
+        onResetPassword={resetPassword}
+        resetCode={authModal.resetCode}
         onClose={() => setAuthModal({ isOpen: false, mode: "signin" })}
         onSuccess={() => handleNavigate("home")}
       />
