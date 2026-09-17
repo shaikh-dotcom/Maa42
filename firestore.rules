@@ -1,12 +1,80 @@
 rules_version = '2';
-
 service cloud.firestore {
   match /databases/{database}/documents {
-    // Each user can only read/write their own profile document.
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    // ---- Private profile (health data, kicks, moods, etc.) ----
     match /users/{userId} {
-      allow read, update: if request.auth != null && request.auth.uid == userId;
-      allow create: if request.auth != null && request.auth.uid == userId;
+      allow read, update: if isSignedIn() && request.auth.uid == userId;
+      allow create: if isSignedIn() && request.auth.uid == userId;
       allow delete: if false;
+    }
+
+    // ---- Public, searchable profile — no health data lives here ----
+    match /publicProfiles/{userId} {
+      allow read: if isSignedIn();
+      allow create, update: if isSignedIn() && request.auth.uid == userId;
+      allow delete: if false;
+    }
+
+    // ---- Friend requests ----
+    match /friendRequests/{requestId} {
+      allow read: if isSignedIn() &&
+        (request.auth.uid == resource.data.fromUid || request.auth.uid == resource.data.toUid);
+      allow create: if isSignedIn() &&
+        request.auth.uid == request.resource.data.fromUid &&
+        request.resource.data.fromUid != request.resource.data.toUid;
+      allow update: if false;
+      // Delete covers cancel (by the sender), decline, and accept (by the
+      // recipient) — all of which remove the pending request doc.
+      allow delete: if isSignedIn() &&
+        (request.auth.uid == resource.data.fromUid || request.auth.uid == resource.data.toUid);
+    }
+
+    // ---- Friendships (created once a request is accepted) ----
+    match /friendships/{friendshipId} {
+      allow read, delete: if isSignedIn() && request.auth.uid in resource.data.participants;
+      allow create: if isSignedIn() && request.auth.uid in request.resource.data.participants;
+      allow update: if false;
+    }
+
+    // ---- Blocks — only the person who created the block can see/manage it ----
+    match /blocks/{blockId} {
+      allow read, delete: if isSignedIn() && request.auth.uid == resource.data.blockerUid;
+      allow create: if isSignedIn() && request.auth.uid == request.resource.data.blockerUid;
+      allow update: if false;
+    }
+
+    // ---- Conversations & messages ----
+    match /conversations/{conversationId} {
+      allow read, update: if isSignedIn() && request.auth.uid in resource.data.participants;
+      allow create: if isSignedIn() && request.auth.uid in request.resource.data.participants;
+      allow delete: if false;
+
+      match /messages/{messageId} {
+        allow read: if isSignedIn() &&
+          request.auth.uid in
+            get(/databases/$(database)/documents/conversations/$(conversationId)).data.participants;
+        allow create: if isSignedIn() &&
+          request.auth.uid == request.resource.data.senderId &&
+          request.auth.uid in
+            get(/databases/$(database)/documents/conversations/$(conversationId)).data.participants;
+        // Only the original sender can edit a message, and only to
+        // soft-delete it ("delete for everyone") — senderId can never change.
+        allow update: if isSignedIn() &&
+          request.auth.uid == resource.data.senderId &&
+          request.resource.data.senderId == resource.data.senderId;
+        allow delete: if false;
+      }
+    }
+
+    // ---- Notifications: written by the other party, read by the owner ----
+    match /notifications/{ownerUid}/items/{itemId} {
+      allow read, update, delete: if isSignedIn() && request.auth.uid == ownerUid;
+      allow create: if isSignedIn() && request.auth.uid == request.resource.data.fromUid;
     }
   }
 }

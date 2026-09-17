@@ -11,6 +11,8 @@ import {
   Check,
   Bot,
   Sparkles,
+  HeartPulse,
+  UserPlus,
 } from "lucide-react";
 
 import { ChevronLeft, ChevronRight } from "lucide-react";
@@ -30,57 +32,185 @@ interface HomeScreenProps {
   onOpenMoodLogger: () => void;
   onSelectArticle: (article: ArticleItem) => void;
   onOpenResources: () => void;
+  onOpenFindPeople: () => void;
 }
 const BABY_WEEKS: WeekData[] = [
   {
     week: 4,
-    imageUrl: "public/week4.png",
+    imageUrl: "/week4.png",
     sizeLabel: "poppy seed",
     note: "The neural tube begins to form.",
   },
   {
     week: 8,
-    imageUrl: "public/week8.jpg",
+    imageUrl: "/week8.jpg",
     sizeLabel: "raspberry",
     note: "Tiny fingers and toes start to appear.",
   },
   {
     week: 12,
-    imageUrl: "public/week12.png",
+    imageUrl: "/week12.png",
     sizeLabel: "lime",
     note: "Reflexes are developing — baby can curl toes.",
   },
   {
     week: 16,
-    imageUrl: "public/week16.png",
+    imageUrl: "/week16.png",
     sizeLabel: "avocado",
     note: "Baby may start making facial expressions.",
   },
   {
     week: 20,
-    imageUrl: "public/week20.jpg",
+    imageUrl: "/week20.jpg",
     sizeLabel: "banana",
     note: "Halfway there! Hearing is developing.",
   },
   {
     week: 24,
-    imageUrl: "public/week-24.png",
+    imageUrl: "/week-24.png",
     sizeLabel: "ear of corn",
     note: "Lungs are developing branching airways.",
   },
   {
+    // NOTE: rename the source file in public/ from "week 28.jpg" to
+    // "week28.jpg" — spaces in filenames become broken/unreliable URLs
+    // once they go through a build, even when percent-encoded.
     week: 28,
-    imageUrl: "public/week 28.jpg",
+    imageUrl: "/week28.jpg",
     sizeLabel: "eggplant",
     note: "Baby can now blink and has eyelashes.",
   },
 ];
+
+// Growth-card data independent of the (image-limited) slideshow above, so the
+// "Baby's Growth" summary always matches the user's actual current week even
+// past week 28, where we don't have artwork. Weight is an approximate median
+// for that gestational week, in grams.
+const WEEK_GROWTH_TABLE: {
+  week: number;
+  sizeLabel: string;
+  weightGrams: number;
+  note: string;
+}[] = [
+  {
+    week: 4,
+    sizeLabel: "poppy seed",
+    weightGrams: 1,
+    note: "The neural tube is just beginning to form.",
+  },
+  {
+    week: 8,
+    sizeLabel: "raspberry",
+    weightGrams: 1,
+    note: "Tiny fingers and toes are starting to appear.",
+  },
+  {
+    week: 12,
+    sizeLabel: "lime",
+    weightGrams: 14,
+    note: "Reflexes are developing — baby can curl their toes.",
+  },
+  {
+    week: 16,
+    sizeLabel: "avocado",
+    weightGrams: 100,
+    note: "Baby may be starting to make facial expressions.",
+  },
+  {
+    week: 20,
+    sizeLabel: "banana",
+    weightGrams: 300,
+    note: "Halfway there! Baby's hearing is developing.",
+  },
+  {
+    week: 24,
+    sizeLabel: "ear of corn",
+    weightGrams: 600,
+    note: "Baby's hearing is fully developed and they can recognize your voice.",
+  },
+  {
+    week: 28,
+    sizeLabel: "eggplant",
+    weightGrams: 1000,
+    note: "Baby can now blink and has eyelashes.",
+  },
+  {
+    week: 32,
+    sizeLabel: "squash",
+    weightGrams: 1700,
+    note: "Baby is gaining fat quickly and practicing breathing movements.",
+  },
+  {
+    week: 36,
+    sizeLabel: "papaya",
+    weightGrams: 2600,
+    note: "Baby is getting into position, likely head-down, for birth.",
+  },
+  {
+    week: 40,
+    sizeLabel: "small pumpkin",
+    weightGrams: 3400,
+    note: "Full term! Baby could arrive any day now.",
+  },
+];
+
+function getGrowthInfo(week: number) {
+  const clamped = Math.max(4, Math.min(40, week || 4));
+  let match = WEEK_GROWTH_TABLE[0];
+  for (const entry of WEEK_GROWTH_TABLE) {
+    if (entry.week <= clamped) match = entry;
+  }
+  return match;
+}
+
+// Trimester boundaries: 1st = weeks 1-13, 2nd = 14-27, 3rd = 28-40.
+function getTrimesterProgress(week: number) {
+  const w = Math.max(1, Math.min(40, week || 1));
+  const trimester = w >= 28 ? 3 : w >= 14 ? 2 : 1;
+  const [start, end] =
+    trimester === 1 ? [1, 13] : trimester === 2 ? [14, 27] : [28, 40];
+  const percent = Math.round(((w - start) / (end - start)) * 100);
+  return { trimester, percent: Math.max(0, Math.min(100, percent)) };
+}
+
+function getStageLabel(user: UserProfile): string {
+  return user.isPostpartum
+    ? `Day ${user.postpartumDay ?? 1} postpartum`
+    : `Week ${user.week}`;
+}
+
+// Recovery-stage copy for the postpartum version of the growth card, since
+// there's no fetal growth to report once the baby has arrived.
+function getRecoveryInfo(postpartumDay: number) {
+  const day = Math.max(1, Math.min(42, postpartumDay || 1));
+  const percent = Math.round((day / 42) * 100);
+  let note =
+    "Your body is beginning the earliest stages of healing — rest as much as you can.";
+  if (day > 7 && day <= 14)
+    note =
+      "Bleeding and soreness typically start easing around now, though everyone heals at their own pace.";
+  else if (day > 14 && day <= 28)
+    note =
+      "Energy often starts returning gradually — gentle movement can help, but don't rush it.";
+  else if (day > 28)
+    note =
+      "You're approaching the end of the traditional 42-day recovery window — many people still feel healing continuing beyond it.";
+  return { day, percent, note };
+}
 
 const AFFIRMATIONS = [
   "My body is beautifully designed for this journey, and every heartbeat brings us closer.",
   "I trust my body's natural wisdom to nurture and protect my growing baby.",
   "Taking time to rest and breathe is an act of deep love for myself and my little one.",
   "Each day brings me closer to holding my baby in my arms with peace and strength.",
+  "I am surrounded by support, love, and capable care every step of the way.",
+];
+
+const POSTPARTUM_AFFIRMATIONS = [
+  "My body did something extraordinary, and it deserves patience while it heals.",
+  "Asking for help is a sign of strength, not weakness.",
+  "I am learning my baby, and my baby is learning me — we're figuring it out together.",
+  "Rest is productive right now. My only job today is to heal and bond.",
   "I am surrounded by support, love, and capable care every step of the way.",
 ];
 
@@ -91,6 +221,7 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
   onOpenMoodLogger,
   onSelectArticle,
   onOpenResources,
+  onOpenFindPeople,
 }) => {
   const [hydrationCount, setHydrationCount] = useState(6);
   const [affirmationIdx, setAffirmationIdx] = useState(0);
@@ -106,6 +237,18 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
   );
   const [weekIndex, setWeekIndex] = useState(initialWeekIndex);
   const activeWeek = BABY_WEEKS[weekIndex];
+
+  const stageLabel = getStageLabel(user);
+  const affirmations = user.isPostpartum
+    ? POSTPARTUM_AFFIRMATIONS
+    : AFFIRMATIONS;
+  const growth = user.isPostpartum ? null : getGrowthInfo(user.week);
+  const trimesterInfo = user.isPostpartum
+    ? null
+    : getTrimesterProgress(user.week);
+  const recovery = user.isPostpartum
+    ? getRecoveryInfo(user.postpartumDay ?? 1)
+    : null;
 
   const goToWeek = (i: number) => {
     if (i < 0 || i >= BABY_WEEKS.length) return;
@@ -126,7 +269,7 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
   };
 
   const handleToggleAffirmation = () => {
-    setAffirmationIdx((prev) => (prev + 1) % AFFIRMATIONS.length);
+    setAffirmationIdx((prev) => (prev + 1) % affirmations.length);
     setIsFavorited(false);
   };
 
@@ -148,73 +291,99 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
       transition={{ duration: 0.35, ease: "easeOut" }}
       className="w-full max-w-2xl mx-auto px-4 sm:px-6 pt-2 pb-28 flex flex-col"
     >
-      {/* Baby Growth Slideshow */}
-      <motion.div className="relative overflow-hidden rounded-3xl shadow-md mb-6 ">
-        {/* Image section — no background at all now */}
-        <div className="relative w-full h-64 sm:h-72 overflow-hidden">
-          <AnimatePresence mode="wait" initial={false}>
-            <motion.img
-              key={activeWeek.week}
-              src={activeWeek.imageUrl}
-              alt={`Baby at week ${activeWeek.week}`}
-              drag="x"
-              dragConstraints={{ left: 0, right: 0 }}
-              dragElastic={0.15}
-              onDragEnd={handleSlideDragEnd}
-              initial={{ opacity: 0, x: 30 }}
-              animate={{ opacity: 1, x: 0 }}
-              exit={{ opacity: 0, x: -30 }}
-              transition={{ duration: 0.3 }}
-              className="absolute inset-0 w-full h-full object-contain p-4 cursor-grab active:cursor-grabbing"
-              draggable={false}
-            />
-          </AnimatePresence>
+      {/* Baby Growth Slideshow — pregnancy only; postpartum users get a
+          recovery-focused hero instead since there's no fetal growth to browse. */}
+      {!user.isPostpartum && (
+        <motion.div className="relative overflow-hidden rounded-3xl shadow-md mb-6 ">
+          {/* Image section — no background at all now */}
+          <div className="relative w-full h-64 sm:h-72 overflow-hidden">
+            <AnimatePresence mode="wait" initial={false}>
+              <motion.img
+                key={activeWeek.week}
+                src={activeWeek.imageUrl}
+                alt={`Baby at week ${activeWeek.week}`}
+                drag="x"
+                dragConstraints={{ left: 0, right: 0 }}
+                dragElastic={0.15}
+                onDragEnd={handleSlideDragEnd}
+                initial={{ opacity: 0, x: 30 }}
+                animate={{ opacity: 1, x: 0 }}
+                exit={{ opacity: 0, x: -30 }}
+                transition={{ duration: 0.3 }}
+                className="absolute inset-0 w-full h-full object-contain p-4 cursor-grab active:cursor-grabbing"
+                draggable={false}
+              />
+            </AnimatePresence>
 
-          <button
-            onClick={() => goToWeek(weekIndex - 1)}
-            disabled={weekIndex === 0}
-            className="absolute left-2 top-1/2 -translate-y-1/2 w-8 h-8 rounded-full bg-surface/70 text-on-surface flex items-center justify-center disabled:opacity-0 transition-opacity cursor-pointer"
-          >
-            <ChevronLeft className="w-4 h-4" />
-          </button>
-          <button
-            onClick={() => goToWeek(weekIndex + 1)}
-            disabled={weekIndex === BABY_WEEKS.length - 1}
-            className="absolute right-2 top-1/2 -translate-y-1/2 w-8 h-8 rounded-full bg-surface/70 text-on-surface flex items-center justify-center disabled:opacity-0 transition-opacity cursor-pointer"
-          >
-            <ChevronRight className="w-4 h-4" />
-          </button>
-        </div>
+            <button
+              onClick={() => goToWeek(weekIndex - 1)}
+              disabled={weekIndex === 0}
+              className="absolute left-2 top-1/2 -translate-y-1/2 w-8 h-8 rounded-full bg-surface/70 text-on-surface flex items-center justify-center disabled:opacity-0 transition-opacity cursor-pointer"
+            >
+              <ChevronLeft className="w-4 h-4" />
+            </button>
+            <button
+              onClick={() => goToWeek(weekIndex + 1)}
+              disabled={weekIndex === BABY_WEEKS.length - 1}
+              className="absolute right-2 top-1/2 -translate-y-1/2 w-8 h-8 rounded-full bg-surface/70 text-on-surface flex items-center justify-center disabled:opacity-0 transition-opacity cursor-pointer"
+            >
+              <ChevronRight className="w-4 h-4" />
+            </button>
+          </div>
 
-        {/* Text section — keeps the primary background */}
-        <div className="relative z-10 p-5 flex flex-col gap-2 bg-primary text-on-primary">
-          <div className="flex items-center justify-between">
+          {/* Text section — keeps the primary background */}
+          <div className="relative z-10 p-5 flex flex-col gap-2 bg-primary text-on-primary">
+            <div className="flex items-center justify-between">
+              <span className="text-xs font-semibold bg-on-primary-fixed/20 text-primary-fixed px-3 py-1 rounded-full">
+                Week {activeWeek.week}
+              </span>
+              <span className="text-xs text-primary-fixed-dim">
+                Size of a {activeWeek.sizeLabel}
+              </span>
+            </div>
+            <p className="text-sm text-primary-fixed leading-relaxed">
+              {activeWeek.note}
+            </p>
+            <div className="flex items-center justify-center gap-1.5 mt-2">
+              {BABY_WEEKS.map((w, i) => (
+                <button
+                  key={w.week}
+                  onClick={() => goToWeek(i)}
+                  className={`h-1.5 rounded-full transition-all cursor-pointer ${
+                    i === weekIndex
+                      ? "w-5 bg-secondary"
+                      : "w-1.5 bg-on-primary-fixed/30"
+                  }`}
+                  aria-label={`Go to week ${w.week}`}
+                />
+              ))}
+            </div>
+          </div>
+        </motion.div>
+      )}
+
+      {/* Postpartum recovery hero — replaces the baby slideshow above */}
+      {user.isPostpartum && recovery && (
+        <motion.div className="relative overflow-hidden rounded-3xl shadow-md mb-6 bg-primary text-on-primary p-6">
+          <div className="flex items-center justify-between mb-3">
             <span className="text-xs font-semibold bg-on-primary-fixed/20 text-primary-fixed px-3 py-1 rounded-full">
-              Week {activeWeek.week}
+              {stageLabel}
             </span>
             <span className="text-xs text-primary-fixed-dim">
-              Size of a {activeWeek.sizeLabel}
+              {recovery.percent}% through your 42-day recovery
             </span>
           </div>
-          <p className="text-sm text-primary-fixed leading-relaxed">
-            {activeWeek.note}
-          </p>
-          <div className="flex items-center justify-center gap-1.5 mt-2">
-            {BABY_WEEKS.map((w, i) => (
-              <button
-                key={w.week}
-                onClick={() => goToWeek(i)}
-                className={`h-1.5 rounded-full transition-all cursor-pointer ${
-                  i === weekIndex
-                    ? "w-5 bg-secondary"
-                    : "w-1.5 bg-on-primary-fixed/30"
-                }`}
-                aria-label={`Go to week ${w.week}`}
-              />
-            ))}
+          <div className="w-full h-2 rounded-full bg-on-primary-fixed/20 overflow-hidden mb-3">
+            <div
+              className="h-full bg-secondary rounded-full transition-all"
+              style={{ width: `${recovery.percent}%` }}
+            />
           </div>
-        </div>
-      </motion.div>
+          <p className="text-sm text-primary-fixed leading-relaxed">
+            {recovery.note}
+          </p>
+        </motion.div>
+      )}
 
       {/* Daily Affirmation Card (kept as its own section) */}
       <motion.div
@@ -253,7 +422,7 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
               className="text-xl sm:text-2xl font-bold leading-snug cursor-pointer hover:opacity-95 transition-opacity select-none"
               title="Tap to cycle affirmations"
             >
-              &ldquo;{AFFIRMATIONS[affirmationIdx]}&rdquo;
+              &ldquo;{affirmations[affirmationIdx]}&rdquo;
             </motion.h2>
           </AnimatePresence>
           <p className="text-xs text-primary-fixed-dim">
@@ -264,7 +433,9 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
 
       {/* Growth & Hydration Progress Section */}
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-6">
-        {/* Baby Growth Card */}
+        {/* Baby Growth Card (pregnancy) / Recovery Card (postpartum) —
+            both now derived from the user's actual stage instead of a
+            fixed 600g / 75% / "large mango" placeholder. */}
         <motion.div
           whileHover={{ y: -3 }}
           className="rounded-3xl bg-surface-container-low p-5 shadow-sm flex flex-col justify-between border border-surface-container"
@@ -272,19 +443,27 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
           <div className="flex items-center justify-between mb-4">
             <div className="flex items-center gap-2.5">
               <div className="w-10 h-10 rounded-full bg-secondary-container/30 flex items-center justify-center text-secondary">
-                <Sparkles className="w-5 h-5" />
+                {user.isPostpartum ? (
+                  <HeartPulse className="w-5 h-5" />
+                ) : (
+                  <Sparkles className="w-5 h-5" />
+                )}
               </div>
               <div>
                 <h3 className="text-sm font-bold text-on-surface">
-                  Baby&apos;s Growth
+                  {user.isPostpartum ? "Your Recovery" : "Baby's Growth"}
                 </h3>
                 <p className="text-xs text-on-surface-variant">
-                  Size of a large mango
+                  {user.isPostpartum
+                    ? `Day ${recovery!.day} of 42`
+                    : `Size of a ${growth!.sizeLabel}`}
                 </p>
               </div>
             </div>
             <span className="text-xs font-semibold bg-secondary-container text-on-secondary-container px-2.5 py-1 rounded-full">
-              75% Trimester
+              {user.isPostpartum
+                ? `${recovery!.percent}% Recovery`
+                : `${trimesterInfo!.percent}% Trimester ${trimesterInfo!.trimester}`}
             </span>
           </div>
 
@@ -312,7 +491,11 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
                 }}
                 className="w-20 h-20 rounded-full bg-surface flex items-center justify-center relative shadow-inner z-10"
               >
-                <span className="text-lg font-bold text-primary">600g</span>
+                <span className="text-lg font-bold text-primary">
+                  {user.isPostpartum
+                    ? `D${recovery!.day}`
+                    : `${growth!.weightGrams}g`}
+                </span>
                 <div
                   className="absolute inset-0 rounded-full border-4 border-primary border-t-transparent animate-spin duration-1000"
                   style={{ animationDuration: "10s" }}
@@ -321,8 +504,7 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
             </div>
             <div className="flex-1">
               <p className="text-xs text-on-surface-variant leading-relaxed">
-                Baby&apos;s hearing is fully developed. They can recognize your
-                voice and respond to gentle touches!
+                {user.isPostpartum ? recovery!.note : growth!.note}
               </p>
             </div>
           </div>
@@ -419,30 +601,36 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
         </div>
 
         <div className="grid grid-cols-2 gap-3">
-          <motion.button
-            whileHover={{ y: -3, scale: 1.01 }}
-            whileTap={{ scale: 0.98 }}
-            onClick={onOpenKickCounter}
-            className="flex items-center gap-3 p-4 rounded-3xl bg-surface-container-low hover:bg-surface-container transition-all text-left group shadow-sm border border-surface-container cursor-pointer"
-          >
-            <div className="w-12 h-12 rounded-2xl bg-secondary-container text-on-secondary-container flex items-center justify-center group-hover:scale-105 transition-transform shadow-xs">
-              <Footprints className="w-6 h-6" />
-            </div>
-            <div>
-              <span className="block text-xs font-semibold text-on-surface-variant">
-                Track Activity
-              </span>
-              <span className="text-sm font-bold text-on-surface">
-                Kick Count
-              </span>
-            </div>
-          </motion.button>
+          {/* Kick counting only makes sense pre-birth; postpartum users get
+              a mood-first layout instead of a non-applicable kick tracker. */}
+          {!user.isPostpartum && (
+            <motion.button
+              whileHover={{ y: -3, scale: 1.01 }}
+              whileTap={{ scale: 0.98 }}
+              onClick={onOpenKickCounter}
+              className="flex items-center gap-3 p-4 rounded-3xl bg-surface-container-low hover:bg-surface-container transition-all text-left group shadow-sm border border-surface-container cursor-pointer"
+            >
+              <div className="w-12 h-12 rounded-2xl bg-secondary-container text-on-secondary-container flex items-center justify-center group-hover:scale-105 transition-transform shadow-xs">
+                <Footprints className="w-6 h-6" />
+              </div>
+              <div>
+                <span className="block text-xs font-semibold text-on-surface-variant">
+                  Track Activity
+                </span>
+                <span className="text-sm font-bold text-on-surface">
+                  Kick Count
+                </span>
+              </div>
+            </motion.button>
+          )}
 
           <motion.button
             whileHover={{ y: -3, scale: 1.01 }}
             whileTap={{ scale: 0.98 }}
             onClick={onOpenMoodLogger}
-            className="flex items-center gap-3 p-4 rounded-3xl bg-surface-container-low hover:bg-surface-container transition-all text-left group shadow-sm border border-surface-container cursor-pointer"
+            className={`flex items-center gap-3 p-4 rounded-3xl bg-surface-container-low hover:bg-surface-container transition-all text-left group shadow-sm border border-surface-container cursor-pointer ${
+              user.isPostpartum ? "col-span-2" : ""
+            }`}
           >
             <div className="w-12 h-12 rounded-2xl bg-primary-container text-on-primary-container flex items-center justify-center group-hover:scale-105 transition-transform shadow-xs">
               <Smile className="w-6 h-6" />
@@ -458,6 +646,26 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
           </motion.button>
         </div>
       </div>
+
+      {/* Find & Connect — entry point into the friends / messaging system */}
+      <motion.button
+        whileHover={{ y: -2 }}
+        whileTap={{ scale: 0.98 }}
+        onClick={onOpenFindPeople}
+        className="flex items-center gap-3 p-4 rounded-3xl bg-surface-container-low hover:bg-surface-container transition-all text-left shadow-sm border border-surface-container cursor-pointer mb-6"
+      >
+        <div className="w-12 h-12 rounded-2xl bg-tertiary-fixed text-on-tertiary-fixed flex items-center justify-center shrink-0">
+          <UserPlus className="w-6 h-6" />
+        </div>
+        <div>
+          <span className="block text-xs font-semibold text-on-surface-variant">
+            Care Community
+          </span>
+          <span className="text-sm font-bold text-on-surface">
+            Find &amp; Connect with Others
+          </span>
+        </div>
+      </motion.button>
 
       {/* Milestones & Articles Section */}
       <div className="mb-8">
@@ -520,7 +728,7 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
             value={chatPrompt}
             onChange={(e) => setChatPrompt(e.target.value)}
             className="w-full bg-transparent px-3 text-sm text-on-surface placeholder:text-on-surface-variant/60 focus:outline-none"
-            placeholder={`Ask Sophia anything about Week ${user.week}...`}
+            placeholder={`Ask Sophia anything about ${stageLabel}...`}
             type="text"
           />
           <motion.button

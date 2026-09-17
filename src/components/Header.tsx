@@ -1,14 +1,16 @@
-import React from 'react';
-import { motion, AnimatePresence } from 'motion/react';
-import { Maa42Logo } from './Maa42Logo';
-import { UserProfile, ScreenId } from '../types';
-import { AlertCircle, User, Sparkles } from 'lucide-react';
+import React from "react";
+import { motion, AnimatePresence } from "motion/react";
+import { Maa42Logo } from "./Maa42Logo";
+import { UserProfile, ScreenId } from "../types";
+import { AlertCircle, User, Sparkles, Bell } from "lucide-react";
+import { useNotifications } from "../hooks/useNotifications";
 
 interface HeaderProps {
   currentScreen: ScreenId;
   user: UserProfile;
   onOpenSos: () => void;
   onOpenProfile: () => void;
+  onOpenNotifications: () => void;
   onGoToLanding?: () => void;
   onTriggerLoadingScreen?: () => void;
 }
@@ -18,21 +20,26 @@ export const Header: React.FC<HeaderProps> = ({
   user,
   onOpenSos,
   onOpenProfile,
+  onOpenNotifications,
   onGoToLanding,
   onTriggerLoadingScreen,
 }) => {
+  const { unreadCount } = useNotifications();
+
   const getScreenTitle = () => {
     switch (currentScreen) {
-      case 'home':
-        return 'Home Dashboard';
-      case 'sophia':
-        return 'Sophia AI Chat';
-      case 'tracker':
-        return 'Maa42 Tracker';
-      case 'circle':
-        return 'Care Circle';
+      case "home":
+        return "Home Dashboard";
+      case "sophia":
+        return "Sophia AI Chat";
+      case "tracker":
+        return "Maa42 Tracker";
+      case "circle":
+        return "Care Circle";
+      case "messages":
+        return "Messages";
       default:
-        return 'MedSophia';
+        return "MedSophia";
     }
   };
 
@@ -40,7 +47,7 @@ export const Header: React.FC<HeaderProps> = ({
     if (user.isPostpartum) {
       return `Fourth Trimester • Day ${user.postpartumDay} of 42`;
     }
-    return `Week ${user.week} • ${user.trimester === 1 ? '1st' : user.trimester === 2 ? '2nd' : '3rd'} Trimester`;
+    return `Week ${user.week} • ${user.trimester === 1 ? "1st" : user.trimester === 2 ? "2nd" : "3rd"} Trimester`;
   };
 
   return (
@@ -74,7 +81,7 @@ export const Header: React.FC<HeaderProps> = ({
           </div>
         </button>
 
-        {/* Right actions: Re-sync / Loading Trigger, SOS button & Profile Avatar */}
+        {/* Right actions: Re-sync / Loading Trigger, Notifications, SOS button & Profile Avatar */}
         <div className="flex items-center gap-2 sm:gap-2.5">
           {onTriggerLoadingScreen && (
             <motion.button
@@ -86,6 +93,22 @@ export const Header: React.FC<HeaderProps> = ({
               <Sparkles className="w-4 h-4" />
             </motion.button>
           )}
+
+          <motion.button
+            whileHover={{ scale: 1.05 }}
+            whileTap={{ scale: 0.94 }}
+            onClick={onOpenNotifications}
+            className="relative w-9 h-9 rounded-full bg-surface-container hover:bg-surface-container-high text-on-surface flex items-center justify-center transition-colors cursor-pointer"
+            aria-label="Notifications"
+            title="Notifications"
+          >
+            <Bell className="w-4 h-4" />
+            {unreadCount > 0 && (
+              <span className="absolute -top-1 -right-1 min-w-[18px] h-[18px] px-1 rounded-full bg-error text-on-error text-[10px] font-bold flex items-center justify-center">
+                {unreadCount > 9 ? "9+" : unreadCount}
+              </span>
+            )}
+          </motion.button>
 
           <motion.button
             id="header-sos-button"

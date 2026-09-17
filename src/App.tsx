@@ -1,36 +1,47 @@
-import React, { useState, useEffect } from 'react';
-import { motion, AnimatePresence } from 'motion/react';
-import { ScreenId, ArticleItem, CareMember, AudioTrack, UserProfile } from './types';
-import { Header } from './components/Header';
-import { BottomNav } from './components/BottomNav';
-import { LandingScreen } from './components/LandingScreen';
-import { HomeScreen } from './components/HomeScreen';
-import { SophiaScreen } from './components/SophiaScreen';
-import { TrackerScreen } from './components/TrackerScreen';
-import { CareCircleScreen } from './components/CareCircleScreen';
-import { LoadingScreen } from './components/LoadingScreen';
-import { AuthModal } from './components/AuthModal';
-import { SosModal } from './components/SosModal';
-import { KickCounterModal } from './components/KickCounterModal';
-import { MoodModal } from './components/MoodModal';
-import { ArticleModal } from './components/ArticleModal';
-import { PdfPreviewModal } from './components/PdfPreviewModal';
-import { ContactMemberModal } from './components/ContactMemberModal';
-import { ProfileModal } from './components/ProfileModal';
-import { ResourcesModal } from './components/ResourcesModal';
-import { ScreenTransitionSkeleton } from './components/ScreenTransitionSkeleton';
-import { Maa42Logo } from './components/Maa42Logo';
-import { useAuth } from './hooks/useAuth';
+import React, { useState, useEffect } from "react";
+import { motion, AnimatePresence } from "motion/react";
+import {
+  ScreenId,
+  ArticleItem,
+  CareMember,
+  AudioTrack,
+  UserProfile,
+} from "./types";
+import { Header } from "./components/Header";
+import { BottomNav } from "./components/BottomNav";
+import { LandingScreen } from "./components/LandingScreen";
+import { HomeScreen } from "./components/HomeScreen";
+import { SophiaScreen } from "./components/SophiaScreen";
+import { TrackerScreen } from "./components/TrackerScreen";
+import { CareCircleScreen } from "./components/CareCircleScreen";
+import { MessagesScreen } from "./components/MessagesScreen";
+import { LoadingScreen } from "./components/LoadingScreen";
+import { AuthModal } from "./components/AuthModal";
+import { SosModal } from "./components/SosModal";
+import { KickCounterModal } from "./components/KickCounterModal";
+import { MoodModal } from "./components/MoodModal";
+import { ArticleModal } from "./components/ArticleModal";
+import { PdfPreviewModal } from "./components/PdfPreviewModal";
+import { ContactMemberModal } from "./components/ContactMemberModal";
+import { ProfileModal } from "./components/ProfileModal";
+import { ResourcesModal } from "./components/ResourcesModal";
+import { FindPeopleModal } from "./components/FindPeopleModal";
+import { NotificationsPanel } from "./components/NotificationsPanel";
+import { ChatModal } from "./components/ChatModal";
+import { ScreenTransitionSkeleton } from "./components/ScreenTransitionSkeleton";
+import { Maa42Logo } from "./components/Maa42Logo";
+import { useAuth } from "./hooks/useAuth";
+import { openConversation } from "./hooks/useMessages";
 
 // Shown only while we don't yet know whether the visitor is signed in, or
 // briefly on the landing page before auth resolves. Dashboard screens are
 // never rendered with this — they wait for the real Firestore profile.
 const PLACEHOLDER_PROFILE: UserProfile = {
-  name: '',
+  name: "",
   week: 0,
   trimester: 1,
   postpartumDay: 0,
-  dueDate: '',
+  dueDate: "",
   isPostpartum: false,
 };
 
@@ -48,44 +59,66 @@ export const App: React.FC = () => {
   } = useAuth();
 
   // Navigation & Screen state
-  const [currentScreen, setCurrentScreen] = useState<ScreenId>('landing');
+  const [currentScreen, setCurrentScreen] = useState<ScreenId>("landing");
   const [screenLoading, setScreenLoading] = useState(false);
   const [isInitialLoading, setIsInitialLoading] = useState(true);
   const [showSyncLoader, setShowSyncLoader] = useState(false);
 
   // Modal states
-  const [authModal, setAuthModal] = useState<{ isOpen: boolean; mode: 'signin' | 'signup' }>({
+  const [authModal, setAuthModal] = useState<{
+    isOpen: boolean;
+    mode: "signin" | "signup";
+  }>({
     isOpen: false,
-    mode: 'signin',
+    mode: "signin",
   });
-  const [sosModal, setSosModal] = useState<{ isOpen: boolean; initialTab: 'timer' | 'hotline' }>({
+  const [sosModal, setSosModal] = useState<{
+    isOpen: boolean;
+    initialTab: "timer" | "hotline";
+  }>({
     isOpen: false,
-    initialTab: 'timer',
+    initialTab: "timer",
   });
   const [kickModalOpen, setKickModalOpen] = useState(false);
   const [moodModalOpen, setMoodModalOpen] = useState(false);
-  const [selectedArticle, setSelectedArticle] = useState<ArticleItem | null>(null);
-  const [pdfPreview, setPdfPreview] = useState<{ isOpen: boolean; summaryText: string }>({
+  const [selectedArticle, setSelectedArticle] = useState<ArticleItem | null>(
+    null,
+  );
+  const [pdfPreview, setPdfPreview] = useState<{
+    isOpen: boolean;
+    summaryText: string;
+  }>({
     isOpen: false,
-    summaryText: '',
+    summaryText: "",
   });
   const [contactModal, setContactModal] = useState<{
     member: CareMember | null;
-    mode: 'chat' | 'call';
+    mode: "chat" | "call";
   }>({
     member: null,
-    mode: 'chat',
+    mode: "chat",
   });
   const [profileModalOpen, setProfileModalOpen] = useState(false);
   const [resourcesModalOpen, setResourcesModalOpen] = useState(false);
-  const [sophiaInitialPrompt, setSophiaInitialPrompt] = useState<string>('');
-  const [pendingTrackId, setPendingTrackId] = useState<string>('');
+  const [sophiaInitialPrompt, setSophiaInitialPrompt] = useState<string>("");
+  const [pendingTrackId, setPendingTrackId] = useState<string>("");
+
+  // Messaging: find-people search, the notifications dropdown, and the
+  // currently-open 1:1 chat (if any). These were previously built as
+  // components but never mounted/wired here.
+  const [findPeopleOpen, setFindPeopleOpen] = useState(false);
+  const [notificationsOpen, setNotificationsOpen] = useState(false);
+  const [chatModal, setChatModal] = useState<{
+    conversationId: string | null;
+    otherUid: string;
+    otherName: string;
+  }>({ conversationId: null, otherUid: "", otherName: "" });
 
   // Once a signed-in user's profile is ready, drop them straight into the
   // dashboard instead of the marketing landing page.
   useEffect(() => {
-    if (!authLoading && currentUser && profile && currentScreen === 'landing') {
-      setCurrentScreen('home');
+    if (!authLoading && currentUser && profile && currentScreen === "landing") {
+      setCurrentScreen("home");
     }
   }, [authLoading, currentUser, profile]); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -95,12 +128,12 @@ export const App: React.FC = () => {
   const handleNavigate = (screen: ScreenId) => {
     if (screen === currentScreen) return;
 
-    if (screen !== 'landing' && (!currentUser || !profile)) {
-      setAuthModal({ isOpen: true, mode: 'signin' });
+    if (screen !== "landing" && (!currentUser || !profile)) {
+      setAuthModal({ isOpen: true, mode: "signin" });
       return;
     }
 
-    window.scrollTo({ top: 0, behavior: 'smooth' });
+    window.scrollTo({ top: 0, behavior: "smooth" });
     setScreenLoading(true);
     setTimeout(() => {
       setCurrentScreen(screen);
@@ -110,7 +143,7 @@ export const App: React.FC = () => {
 
   const handleNavigateToSophiaWithPrompt = (prompt?: string) => {
     if (prompt) setSophiaInitialPrompt(prompt);
-    handleNavigate('sophia');
+    handleNavigate("sophia");
   };
 
   const handleUpdateUser = (updated: Partial<UserProfile>) => {
@@ -119,7 +152,7 @@ export const App: React.FC = () => {
 
   const handleSignOut = () => {
     signOutUser();
-    setCurrentScreen('landing');
+    setCurrentScreen("landing");
   };
 
   // Fixes the old bug where every track played a hardcoded 216Hz tone: we
@@ -127,7 +160,38 @@ export const App: React.FC = () => {
   // which owns playback and already knows each track's real frequency.
   const handleSelectAudioFromResources = (track: AudioTrack) => {
     setPendingTrackId(track.id);
-    handleNavigate('tracker');
+    handleNavigate("tracker");
+  };
+
+  // Opens (creating if it doesn't exist yet) the 1:1 conversation with
+  // otherUid and shows the chat modal. Used from Find People, the Messages
+  // list ("Start a Conversation"), and a friend's search result.
+  const handleOpenChatWithUser = async (
+    otherUid: string,
+    otherName: string,
+  ) => {
+    if (!profile) return;
+    const conversationId = await openConversation(
+      otherUid,
+      otherName,
+      profile.name,
+    );
+    setFindPeopleOpen(false);
+    setChatModal({ conversationId, otherUid, otherName });
+  };
+
+  // Opens a chat we already know the conversationId for — e.g. tapping a
+  // "new message" notification.
+  const handleOpenChatFromNotification = (
+    conversationId: string,
+    otherUid: string,
+    otherName: string,
+  ) => {
+    setChatModal({ conversationId, otherUid, otherName });
+  };
+
+  const handleCloseChat = () => {
+    setChatModal({ conversationId: null, otherUid: "", otherName: "" });
   };
 
   const user = profile ?? PLACEHOLDER_PROFILE;
@@ -139,7 +203,7 @@ export const App: React.FC = () => {
       <AnimatePresence>
         {showBrandedLoader && (
           <LoadingScreen
-            userName={profile?.name || 'there'}
+            userName={profile?.name || "there"}
             onComplete={() => {
               setIsInitialLoading(false);
               setShowSyncLoader(false);
@@ -148,13 +212,14 @@ export const App: React.FC = () => {
         )}
       </AnimatePresence>
 
-      {/* Header (Visible on Home, Sophia, Tracker, Care Circle) */}
-      {currentScreen !== 'landing' ? (
+      {/* Header (Visible on Home, Sophia, Tracker, Care Circle, Messages) */}
+      {currentScreen !== "landing" ? (
         <Header
           currentScreen={currentScreen}
           user={user}
-          onOpenSos={() => setSosModal({ isOpen: true, initialTab: 'hotline' })}
+          onOpenSos={() => setSosModal({ isOpen: true, initialTab: "hotline" })}
           onOpenProfile={() => setProfileModalOpen(true)}
+          onOpenNotifications={() => setNotificationsOpen(true)}
           onGoToLanding={handleSignOut}
           onTriggerLoadingScreen={() => setShowSyncLoader(true)}
         />
@@ -171,7 +236,7 @@ export const App: React.FC = () => {
             {currentUser ? (
               <motion.button
                 whileTap={{ scale: 0.95 }}
-                onClick={() => handleNavigate('home')}
+                onClick={() => handleNavigate("home")}
                 className="text-xs font-semibold bg-primary text-on-primary hover:bg-primary-container px-4 py-1.5 rounded-full transition-all shadow-sm cursor-pointer"
               >
                 Go to Dashboard
@@ -180,7 +245,7 @@ export const App: React.FC = () => {
               <>
                 <motion.button
                   whileTap={{ scale: 0.95 }}
-                  onClick={() => setAuthModal({ isOpen: true, mode: 'signin' })}
+                  onClick={() => setAuthModal({ isOpen: true, mode: "signin" })}
                   className="text-xs font-semibold text-primary hover:text-primary-container px-3 py-1.5 rounded-full transition-colors cursor-pointer"
                 >
                   Sign In
@@ -188,7 +253,7 @@ export const App: React.FC = () => {
                 <motion.button
                   whileHover={{ scale: 1.03 }}
                   whileTap={{ scale: 0.96 }}
-                  onClick={() => setAuthModal({ isOpen: true, mode: 'signup' })}
+                  onClick={() => setAuthModal({ isOpen: true, mode: "signup" })}
                   className="text-xs font-semibold bg-primary text-on-primary hover:bg-primary-container px-4 py-1.5 rounded-full transition-all shadow-sm cursor-pointer"
                 >
                   Enter Dashboard
@@ -200,7 +265,9 @@ export const App: React.FC = () => {
       )}
 
       {/* Main Content Area with Animated Screen Transitions */}
-      <main className={`flex-1 ${currentScreen !== 'landing' ? 'pt-24' : 'pt-2'}`}>
+      <main
+        className={`flex-1 ${currentScreen !== "landing" ? "pt-24" : "pt-2"}`}
+      >
         <AnimatePresence mode="wait">
           {screenLoading ? (
             <motion.div
@@ -213,7 +280,7 @@ export const App: React.FC = () => {
             </motion.div>
           ) : (
             <>
-              {currentScreen === 'landing' && (
+              {currentScreen === "landing" && (
                 <motion.div
                   key="landing"
                   initial={{ opacity: 0, y: 10 }}
@@ -223,13 +290,17 @@ export const App: React.FC = () => {
                 >
                   <LandingScreen
                     onNavigate={handleNavigate}
-                    onOpenSignIn={() => setAuthModal({ isOpen: true, mode: 'signin' })}
-                    onOpenSignUp={() => setAuthModal({ isOpen: true, mode: 'signup' })}
+                    onOpenSignIn={() =>
+                      setAuthModal({ isOpen: true, mode: "signin" })
+                    }
+                    onOpenSignUp={() =>
+                      setAuthModal({ isOpen: true, mode: "signup" })
+                    }
                   />
                 </motion.div>
               )}
 
-              {currentScreen === 'home' && profile && (
+              {currentScreen === "home" && profile && (
                 <motion.div
                   key="home"
                   initial={{ opacity: 0, y: 10 }}
@@ -244,11 +315,12 @@ export const App: React.FC = () => {
                     onOpenMoodLogger={() => setMoodModalOpen(true)}
                     onSelectArticle={(art) => setSelectedArticle(art)}
                     onOpenResources={() => setResourcesModalOpen(true)}
+                    onOpenFindPeople={() => setFindPeopleOpen(true)}
                   />
                 </motion.div>
               )}
 
-              {currentScreen === 'sophia' && profile && (
+              {currentScreen === "sophia" && profile && (
                 <motion.div
                   key="sophia"
                   initial={{ opacity: 0, y: 10 }}
@@ -259,13 +331,15 @@ export const App: React.FC = () => {
                   <SophiaScreen
                     user={profile}
                     initialPrompt={sophiaInitialPrompt}
-                    onClearInitialPrompt={() => setSophiaInitialPrompt('')}
-                    onOpenSos={() => setSosModal({ isOpen: true, initialTab: 'hotline' })}
+                    onClearInitialPrompt={() => setSophiaInitialPrompt("")}
+                    onOpenSos={() =>
+                      setSosModal({ isOpen: true, initialTab: "hotline" })
+                    }
                   />
                 </motion.div>
               )}
 
-              {currentScreen === 'tracker' && profile && (
+              {currentScreen === "tracker" && profile && (
                 <motion.div
                   key="tracker"
                   initial={{ opacity: 0, y: 10 }}
@@ -276,12 +350,12 @@ export const App: React.FC = () => {
                   <TrackerScreen
                     user={profile}
                     initialTrackId={pendingTrackId}
-                    onClearInitialTrackId={() => setPendingTrackId('')}
+                    onClearInitialTrackId={() => setPendingTrackId("")}
                   />
                 </motion.div>
               )}
 
-              {currentScreen === 'circle' && profile && (
+              {currentScreen === "circle" && profile && (
                 <motion.div
                   key="circle"
                   initial={{ opacity: 0, y: 10 }}
@@ -290,10 +364,33 @@ export const App: React.FC = () => {
                   transition={{ duration: 0.3 }}
                 >
                   <CareCircleScreen
-                    onOpenSosContraction={() => setSosModal({ isOpen: true, initialTab: 'timer' })}
-                    onOpenSosHotline={() => setSosModal({ isOpen: true, initialTab: 'hotline' })}
-                    onPreviewPdf={(summaryText) => setPdfPreview({ isOpen: true, summaryText })}
-                    onContactMember={(member, mode) => setContactModal({ member, mode })}
+                    onOpenSosContraction={() =>
+                      setSosModal({ isOpen: true, initialTab: "timer" })
+                    }
+                    onOpenSosHotline={() =>
+                      setSosModal({ isOpen: true, initialTab: "hotline" })
+                    }
+                    onPreviewPdf={(summaryText) =>
+                      setPdfPreview({ isOpen: true, summaryText })
+                    }
+                    onContactMember={(member, mode) =>
+                      setContactModal({ member, mode })
+                    }
+                  />
+                </motion.div>
+              )}
+
+              {currentScreen === "messages" && profile && (
+                <motion.div
+                  key="messages"
+                  initial={{ opacity: 0, y: 10 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: -10 }}
+                  transition={{ duration: 0.3 }}
+                >
+                  <MessagesScreen
+                    onOpenChat={handleOpenChatWithUser}
+                    onFindPeople={() => setFindPeopleOpen(true)}
                   />
                 </motion.div>
               )}
@@ -302,8 +399,8 @@ export const App: React.FC = () => {
         </AnimatePresence>
       </main>
 
-      {/* Bottom Navigation (Visible on app screens 2-5) */}
-      {currentScreen !== 'landing' && (
+      {/* Bottom Navigation (Visible on all app screens, including Messages) */}
+      {currentScreen !== "landing" && (
         <BottomNav
           currentScreen={currentScreen}
           onSelectScreen={handleNavigate}
@@ -317,14 +414,14 @@ export const App: React.FC = () => {
         initialMode={authModal.mode}
         onSignIn={signIn}
         onSignUp={signUp}
-        onClose={() => setAuthModal({ isOpen: false, mode: 'signin' })}
-        onSuccess={() => handleNavigate('home')}
+        onClose={() => setAuthModal({ isOpen: false, mode: "signin" })}
+        onSuccess={() => handleNavigate("home")}
       />
 
       <SosModal
         isOpen={sosModal.isOpen}
         initialTab={sosModal.initialTab}
-        onClose={() => setSosModal({ isOpen: false, initialTab: 'timer' })}
+        onClose={() => setSosModal({ isOpen: false, initialTab: "timer" })}
       />
 
       <KickCounterModal
@@ -348,13 +445,13 @@ export const App: React.FC = () => {
         isOpen={pdfPreview.isOpen}
         summaryText={pdfPreview.summaryText}
         user={user}
-        onClose={() => setPdfPreview({ isOpen: false, summaryText: '' })}
+        onClose={() => setPdfPreview({ isOpen: false, summaryText: "" })}
       />
 
       <ContactMemberModal
         member={contactModal.member}
         mode={contactModal.mode}
-        onClose={() => setContactModal({ member: null, mode: 'chat' })}
+        onClose={() => setContactModal({ member: null, mode: "chat" })}
       />
 
       <ProfileModal
@@ -370,6 +467,28 @@ export const App: React.FC = () => {
         onClose={() => setResourcesModalOpen(false)}
         onSelectArticle={(art) => setSelectedArticle(art)}
         onSelectAudioTrack={handleSelectAudioFromResources}
+      />
+
+      {/* Messaging: find people, notifications, and the active 1:1 chat.
+          These components already existed but were never mounted here. */}
+      <FindPeopleModal
+        isOpen={findPeopleOpen}
+        onClose={() => setFindPeopleOpen(false)}
+        onOpenChat={handleOpenChatWithUser}
+      />
+
+      <NotificationsPanel
+        isOpen={notificationsOpen}
+        onClose={() => setNotificationsOpen(false)}
+        onOpenChat={handleOpenChatFromNotification}
+      />
+
+      <ChatModal
+        conversationId={chatModal.conversationId}
+        otherUid={chatModal.otherUid}
+        otherName={chatModal.otherName}
+        onClose={handleCloseChat}
+        onBlocked={handleCloseChat}
       />
     </div>
   );

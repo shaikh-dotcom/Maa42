@@ -13,6 +13,52 @@ app.use(express.json());
 const GROQ_API_KEY = process.env.GROQ_API_KEY;
 const GROQ_MODEL = process.env.GROQ_MODEL || "llama-3.3-70b-versatile";
 
+// ---------------------------------------------------------------------------
+// User stage context
+// ---------------------------------------------------------------------------
+// Mirrors the shape of `UserProfile` from useAuth.ts. The frontend must send
+// this alongside the chat message so responses reflect the signed-in user's
+// actual journey instead of an assumed Week 24 / 2nd trimester.
+interface UserStageProfile {
+  name?: string;
+  week?: number;
+  trimester?: number;
+  isPostpartum?: boolean;
+  postpartumDay?: number;
+}
+
+// Turns a raw profile into a plain-English description of where the user is
+// right now, used both in the AI system prompt and in the canned fallbacks.
+function describeStage(profile?: UserStageProfile): {
+  label: string; // e.g. "Week 24 (2nd trimester)" or "Day 12 postpartum"
+  contextLine: string; // one line for the fallback replies
+} {
+  if (!profile) {
+    return {
+      label: "an unspecified stage",
+      contextLine:
+        "I don't have your current week or postpartum day on file yet, so this is general guidance — let me know where you are in your journey for anything more specific.",
+    };
+  }
+
+  if (profile.isPostpartum) {
+    const day = profile.postpartumDay ?? 1;
+    return {
+      label: `Day ${day} postpartum`,
+      contextLine: `You're on Day ${day} of your 42-day postpartum recovery.`,
+    };
+  }
+
+  const week = profile.week ?? 1;
+  const trimester = profile.trimester ?? (week >= 28 ? 3 : week >= 14 ? 2 : 1);
+  const trimesterWord =
+    trimester === 1 ? "1st" : trimester === 2 ? "2nd" : "3rd";
+  return {
+    label: `Week ${week} (${trimesterWord} trimester)`,
+    contextLine: `You're currently at Week ${week}, in your ${trimesterWord} trimester.`,
+  };
+}
+
 // Calls Groq's OpenAI-compatible chat completions endpoint.
 // Returns the reply text, or null if no GROQ_API_KEY is configured.
 async function callGroq(
@@ -58,26 +104,37 @@ app.get("/api/health", (_req, res) => {
 // Sophia AI Chat API
 app.post("/api/chat", async (req, res) => {
   try {
-    const { message, history } = req.body;
+    const { message, history, profile } = req.body as {
+      message?: string;
+      history?: unknown;
+      profile?: UserStageProfile;
+    };
     if (!message) {
       return res.status(400).json({ error: "Message is required" });
     }
 
+    const stage = describeStage(profile);
+    const name = profile?.name ? ` ${profile.name}` : "";
+
     const systemInstruction = `You are Sophia, an empathetic, supportive, clinical AI maternal companion for MedSophia Maa42.
-The user is currently navigating Week 24 of pregnancy (2nd trimester) and preparing for their 42-day golden postpartum recovery (Maa42).
+The user${name} is currently at ${stage.label}${
+      profile?.isPostpartum
+        ? ", in their 42-day golden postpartum recovery (Maa42)"
+        : ""
+    }.
 Your tone is deeply compassionate, clinically sound, reassuring, and gentle.
 When answering:
 1. Provide a warm, empathetic validation of how they are feeling.
-2. Provide concise clinical context (what is happening physiologically in Week 24 or postpartum).
+2. Provide concise clinical context for exactly this stage (${stage.label}) — do not describe a different week, trimester, or postpartum day than the one given.
 3. If relevant, classify the triage status: Low Risk / Routine Monitoring, Moderate, or Immediate Clinical Attention.
-4. Give 2-3 clear, actionable comfort steps or relief tips.
+4. Give 2-3 clear, actionable comfort steps or relief tips appropriate to this stage.
 5. Remind them gently that you provide supportive guidance, and to consult their lead OB-GYN (Dr. Ananya Sharma) for any sudden or severe changes.
 Keep responses concise, beautifully structured, and avoid medical jargon without explanation.`;
 
     try {
       const replyText = await callGroq(
         systemInstruction,
-        `User Question: ${message}\nContext: Week 24 pregnancy, second trimester.`,
+        `User Question: ${message}\nContext: ${stage.contextLine}`,
       );
       if (replyText) {
         return res.json({ reply: replyText });
@@ -86,17 +143,28 @@ Keep responses concise, beautifully structured, and avoid medical jargon without
       console.error("Groq API error, falling back to canned reply:", groqErr);
     }
 
-    // Fallback intelligent clinical answers if GROQ_API_KEY is not configured or the call failed
+    // Fallback replies used if GROQ_API_KEY is not configured or the call
+    // failed. These now branch on the user's actual stage instead of
+    // assuming Week 24.
     const lower = message.toLowerCase();
-    let reply =
-      "Hello! It is completely understandable to check on this. At Week 24, your body is expanding and your baby weighs approximately 600g (the size of a large mango). Ligament stretching and mild sensations are very common.";
+    const opener = `Hello${name}! It is completely understandable to check on this. ${stage.contextLine}`;
+    let reply = `${opener} Every day brings its own changes, and it's great that you're staying tuned in to how you feel.`;
 
     if (
       lower.includes("pressure") ||
       lower.includes("pelvic") ||
       lower.includes("cramp")
     ) {
-      reply = `Hello! It is completely understandable to check on this. Mild pelvic pressure around Week 24 is often caused by the growing uterus and shifting ligaments (like round ligaments). However, let's make sure you're safe and comfortable.
+      reply = profile?.isPostpartum
+        ? `${opener} Mild cramping or pelvic pressure this early in recovery is often your uterus contracting back down (afterpains) — this is normal, especially while breastfeeding.
+
+**Triage Status**: Low Risk / Routine Monitoring (No red flags detected. Rest recommended).
+
+**Step-by-Step Relief Guide**:
+1. **Warmth**: A warm compress on your lower abdomen can ease afterpain cramping.
+2. **Empty your bladder regularly**: A full bladder can worsen cramping and slow uterine recovery.
+3. **Rest lying down**: Lying flat for a while can reduce pelvic pressure between feeds.`
+        : `${opener} Pelvic pressure at this stage is often caused by the growing uterus and shifting ligaments (like round ligaments). Let's make sure you're safe and comfortable.
 
 **Triage Status**: Low Risk / Routine Monitoring (No red flags detected. Rest recommended).
 
@@ -111,26 +179,42 @@ Keep responses concise, beautifully structured, and avoid medical jargon without
       lower.includes("sos")
     ) {
       reply = `You should call Dr. Sharma or your on-call triage immediately if you experience:
-• Regular, painful contractions (more than 4-5 in an hour before 37 weeks)
+${
+  profile?.isPostpartum
+    ? `• Heavy bleeding (soaking a pad in an hour) or large clots
+• Fever over 100.4°F (38°C)
+• Severe headache with visual disturbances
+• Redness, warmth, or discharge from a C-section incision or perineal tear
+• Thoughts of harming yourself or your baby`
+    : `• Regular, painful contractions (more than 4-5 in an hour before 37 weeks)
 • Any vaginal bleeding or fluid leakage
 • Severe headache with visual disturbances (spots or blurry vision)
 • Sudden severe swelling in face, hands, or feet
-• Marked decrease in your baby's regular movement pattern
+• Marked decrease in your baby's regular movement pattern`
+}
 
-You can use the **SOS Escalation** button at the top or in the Care Circle tab anytime for one-touch access to the 24/7 OB triage hotline.`;
+You can use the **SOS Escalation** button at the top or in the Care Circle tab anytime for one-touch access to the 24/7 ${profile?.isPostpartum ? "postpartum" : "OB"} triage hotline.`;
     } else if (
       lower.includes("sleep") ||
       lower.includes("tired") ||
       lower.includes("rest")
     ) {
-      reply = `Sleep changes are very normal during the late second trimester! As baby grows, sleeping on your left side with a supportive pillow between your knees and under your bump can reduce vena cava compression and ease hip tension.
+      reply = profile?.isPostpartum
+        ? `${opener} Exhaustion is one of the most common things new mothers feel — your body is healing and adjusting to broken sleep from feeds.
+Try to sleep whenever the baby sleeps rather than using that time for chores, and don't hesitate to hand off a feed to a partner or family member when you can.
+Try our **Fourth Trimester Sleep & Nervous System Calm** audio guide in the Tracker tab before resting.`
+        : `${opener} Sleep changes are very normal at this stage. Sleeping on your left side with a supportive pillow between your knees and under your bump can reduce vena cava compression and ease hip tension.
 Try our **Fourth Trimester Sleep & Nervous System Calm** audio guide in the Tracker tab before bedtime.`;
     } else if (lower.includes("kick") || lower.includes("movement")) {
-      reply = `At 24 weeks, baby's kicks and turns are becoming more pronounced and rhythmic! You can use our Quick Log **Kick Count** feature on your dashboard.
+      reply = profile?.isPostpartum
+        ? `${opener} Kick counting is a pregnancy-tracking feature, so it won't apply during postpartum recovery — but if you'd like, I can help you log feeding or mood patterns instead from your dashboard.`
+        : `${opener} Baby's kicks and turns become more noticeable as pregnancy progresses. You can use our Quick Log **Kick Count** feature on your dashboard.
 Most healthcare providers recommend noting when baby is typically active (often after meals or when you lie down to rest).`;
     } else {
-      reply = `Thank you for sharing that with me. During Week 24, both you and your baby are reaching wonderful milestones. Your baby's hearing is fully developed and they can recognize the soothing cadence of your voice.
-
+      reply = profile?.isPostpartum
+        ? `${opener} Your body is doing remarkable work recovering right now. Focus on hydration, gentle movement when you feel ready, and accepting help where you can get it.
+If you'd like me to log any symptoms for Dr. Sharma's upcoming visit, just let me know!`
+        : `${opener} Both you and your baby are reaching wonderful milestones at this stage.
 Remember to stay well hydrated (6 to 8 glasses daily), take gentle postural breaks, and listen to your body. If you'd like me to log any symptoms for Dr. Sharma's upcoming visit, just let me know!`;
     }
 
@@ -147,11 +231,16 @@ Remember to stay well hydrated (6 to 8 glasses daily), take gentle postural brea
 // Telehealth Clinical Summary Generator API
 app.post("/api/clinical-summary", async (req, res) => {
   try {
-    const { bp, weightChange, symptoms, week } = req.body;
+    const { bp, weightChange, symptoms, week, isPostpartum, postpartumDay } =
+      req.body;
+
+    const stageLabel = isPostpartum
+      ? `Day ${postpartumDay ?? 1} postpartum`
+      : `Week ${week || 1}`;
 
     const systemPrompt =
       "You generate concise, clean clinical summaries for OB-GYN review, formatted as bullet points for a digital telehealth dashboard.";
-    const prompt = `Generate a concise 3-bullet clinical summary for OB-GYN Dr. Ananya Sharma for a patient at Week ${week || 24}.
+    const prompt = `Generate a concise 3-bullet clinical summary for OB-GYN Dr. Ananya Sharma for a patient at ${stageLabel}.
 Input vitals: BP: ${bp || "118/76 mmHg"}, Weight change: ${weightChange || "+0.4kg this week"}, Recent symptoms: ${symptoms || "Mild lower back tension on Wednesday, resolved with stretching; daily hydration on target 7/8 glasses"}.
 Format as clean, bullet points suitable for a digital health telehealth dashboard.`;
 
@@ -171,7 +260,7 @@ Format as clean, bullet points suitable for a digital health telehealth dashboar
     }
 
     return res.json({
-      summary: `• BP Average: ${bp || "118/76 mmHg"} (Optimal & Stable)\n• Weight gain: ${weightChange || "+0.4kg this week within clinical target"}\n• Maternal Wellbeing: Reported mild lower back tension on Wed; resolved with rest & stretching. Daily fetal kicks active.`,
+      summary: `• BP Average: ${bp || "118/76 mmHg"} (Optimal & Stable)\n• Weight gain: ${weightChange || "+0.4kg this week within clinical target"}\n• Maternal Wellbeing (${stageLabel}): Reported mild lower back tension on Wed; resolved with rest & stretching. Daily fetal kicks active.`,
       updatedAt: "Just now",
     });
   } catch (err: any) {
