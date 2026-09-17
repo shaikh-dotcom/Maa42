@@ -31,7 +31,14 @@ export const NotificationsPanel: React.FC<NotificationsPanelProps> = ({
   onClose,
   onOpenChat,
 }) => {
-  const { notifications, markAsRead, markAllAsRead, clearNotification } =
+  const {
+    notifications,
+    isLoading,
+    error,
+    markAsRead,
+    markAllAsRead,
+    clearNotification,
+  } =
     useNotifications();
   const { incomingRequests, acceptFriendRequest, declineFriendRequest } =
     useFriends();
@@ -80,13 +87,25 @@ export const NotificationsPanel: React.FC<NotificationsPanelProps> = ({
         </div>
 
         <div className="flex-1 overflow-y-auto divide-y divide-surface-container">
-          {notifications.length === 0 && (
+          {isLoading && (
+            <p className="text-xs text-on-surface-variant text-center py-8">
+              Loading notifications...
+            </p>
+          )}
+
+          {!isLoading && error && (
+            <p className="text-xs text-error text-center py-8 px-6">{error}</p>
+          )}
+
+          {!isLoading && !error && notifications.length === 0 && (
             <p className="text-xs text-on-surface-variant text-center py-8">
               No notifications yet.
             </p>
           )}
 
-          {notifications.map((n) => {
+          {!isLoading &&
+            !error &&
+            notifications.map((n) => {
             const icon =
               n.type === "friend_request" ? (
                 <UserPlus className="w-4 h-4" />
@@ -151,7 +170,7 @@ export const NotificationsPanel: React.FC<NotificationsPanelProps> = ({
                 </div>
               </div>
             );
-          })}
+            })}
         </div>
       </motion.div>
     </div>
