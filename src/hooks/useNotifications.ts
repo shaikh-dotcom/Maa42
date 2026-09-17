@@ -14,10 +14,20 @@ import { AppNotification } from "../types";
 
 export function useNotifications() {
   const [notifications, setNotifications] = useState<AppNotification[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const uid = auth.currentUser?.uid ?? null;
 
   useEffect(() => {
-    const uid = auth.currentUser?.uid;
-    if (!uid) return;
+    if (!uid) {
+      setNotifications([]);
+      setError(null);
+      setIsLoading(false);
+      return;
+    }
+
+    setIsLoading(true);
+    setError(null);
     const unsub = onSnapshot(
       query(
         collection(db, "notifications", uid, "items"),
@@ -28,10 +38,16 @@ export function useNotifications() {
         setNotifications(
           snap.docs.map((d) => ({ id: d.id, ...(d.data() as any) })),
         );
+        setIsLoading(false);
+      },
+      () => {
+        setNotifications([]);
+        setError("Unable to load notifications right now.");
+        setIsLoading(false);
       },
     );
     return unsub;
-  }, []);
+  }, [uid]);
 
   const unreadCount = notifications.filter((n) => !n.read).length;
 
@@ -64,6 +80,8 @@ export function useNotifications() {
   return {
     notifications,
     unreadCount,
+    isLoading,
+    error,
     markAsRead,
     markAllAsRead,
     clearNotification,
