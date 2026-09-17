@@ -1,11 +1,14 @@
 import { useEffect, useState, useCallback } from "react";
 import {
+  confirmPasswordReset,
   createUserWithEmailAndPassword,
   onAuthStateChanged,
+  sendPasswordResetEmail,
   signInWithEmailAndPassword,
   signOut,
   updateProfile as updateFirebaseProfile,
   type User,
+  verifyPasswordResetCode,
 } from "firebase/auth";
 import {
   arrayUnion,
@@ -181,6 +184,12 @@ export function firebaseErrorToMessage(code?: string): string {
     case "auth/too-many-requests":
       return "Too many attempts. Please wait a moment and try again.";
 
+    case "auth/expired-action-code":
+      return "This reset link has expired. Please request a new one.";
+
+    case "auth/invalid-action-code":
+      return "This reset link is invalid. Please request a new one.";
+
     case "auth/network-request-failed":
       return "Network error — please check your connection and try again.";
 
@@ -295,6 +304,33 @@ export function useAuth() {
     return credential;
   }, []);
 
+  const requestPasswordReset = useCallback(async (email: string) => {
+    try {
+      await sendPasswordResetEmail(auth, email.trim(), {
+        // Keep users on this app for reset completion.
+        url: window.location.origin,
+      });
+    } catch (error: any) {
+      // Preserve account-enumeration protection by returning success even if the
+      // account does not exist.
+      if (error?.code === "auth/user-not-found") {
+        return;
+      }
+      throw error;
+    }
+  }, []);
+
+  const verifyResetCode = useCallback(async (oobCode: string) => {
+    return verifyPasswordResetCode(auth, oobCode);
+  }, []);
+
+  const resetPassword = useCallback(
+    async (oobCode: string, newPassword: string) => {
+      await confirmPasswordReset(auth, oobCode, newPassword);
+    },
+    [],
+  );
+
   const signOutUser = useCallback(async () => {
     await signOut(auth);
     setProfile(null);
@@ -363,6 +399,9 @@ export function useAuth() {
     authLoading,
     signUp,
     signIn,
+    requestPasswordReset,
+    verifyResetCode,
+    resetPassword,
     signOutUser,
     persistProfile,
     logKickSession,

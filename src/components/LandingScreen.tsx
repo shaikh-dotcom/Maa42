@@ -6,12 +6,14 @@ import { Heart, ArrowRight, Bot, TrendingUp, Users, ChevronRight, Star, Sparkles
 
 interface LandingScreenProps {
   onNavigate: (screen: ScreenId) => void;
+  isAuthenticated: boolean;
   onOpenSignIn: () => void;
   onOpenSignUp: () => void;
 }
 
 export const LandingScreen: React.FC<LandingScreenProps> = ({
   onNavigate,
+  isAuthenticated,
   onOpenSignIn,
   onOpenSignUp,
 }) => {
@@ -112,10 +114,10 @@ export const LandingScreen: React.FC<LandingScreenProps> = ({
             <motion.button
               whileHover={{ scale: 1.02 }}
               whileTap={{ scale: 0.97 }}
-              onClick={onOpenSignIn}
+              onClick={() => (isAuthenticated ? onNavigate('home') : onOpenSignIn())}
               className="bg-surface text-primary border border-outline-variant/40 font-semibold px-8 py-3.5 rounded-full hover:bg-surface-container transition-all flex items-center justify-center gap-2 cursor-pointer shadow-sm"
             >
-              <span>Sign In</span>
+              <span>{isAuthenticated ? 'Enter Dashboard' : 'Sign In'}</span>
             </motion.button>
           </motion.div>
         </div>
@@ -265,17 +267,31 @@ export const LandingScreen: React.FC<LandingScreenProps> = ({
                   <ArrowRight className="w-4 h-4" />
                 </motion.button>
 
-                <motion.button
-                  whileHover={{ scale: 1.02 }}
-                  whileTap={{ scale: 0.98 }}
-                  onClick={() => {
-                    setShowOnboardingModal(false);
-                    onOpenSignUp();
-                  }}
-                  className="w-full bg-surface text-secondary border border-secondary/30 py-3 rounded-full font-semibold text-sm hover:bg-secondary-fixed/20 transition-all cursor-pointer"
-                >
-                  Create New Account
-                </motion.button>
+                {isAuthenticated ? (
+                  <motion.button
+                    whileHover={{ scale: 1.02 }}
+                    whileTap={{ scale: 0.98 }}
+                    onClick={() => {
+                      setShowOnboardingModal(false);
+                      onNavigate('home');
+                    }}
+                    className="w-full bg-surface text-secondary border border-secondary/30 py-3 rounded-full font-semibold text-sm hover:bg-secondary-fixed/20 transition-all cursor-pointer"
+                  >
+                    Enter Dashboard
+                  </motion.button>
+                ) : (
+                  <motion.button
+                    whileHover={{ scale: 1.02 }}
+                    whileTap={{ scale: 0.98 }}
+                    onClick={() => {
+                      setShowOnboardingModal(false);
+                      onOpenSignUp();
+                    }}
+                    className="w-full bg-surface text-secondary border border-secondary/30 py-3 rounded-full font-semibold text-sm hover:bg-secondary-fixed/20 transition-all cursor-pointer"
+                  >
+                    Create New Account
+                  </motion.button>
+                )}
 
                 <button
                   onClick={() => {
