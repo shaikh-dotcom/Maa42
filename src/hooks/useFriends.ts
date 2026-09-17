@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from "react";
 import {
   addDoc,
   collection,
@@ -12,17 +12,22 @@ import {
   serverTimestamp,
   setDoc,
   where,
-} from 'firebase/firestore';
-import { auth, db } from '../firebase';
-import { pairId } from '../utils/ids';
-import { FriendRequest, PublicProfile } from '../types';
+} from "firebase/firestore";
+import { auth, db } from "../firebase";
+import { pairId } from "../utils/ids";
+import { FriendRequest, PublicProfile } from "../types";
 
 export interface FriendEntry {
   uid: string;
   name: string;
 }
 
-export type Relation = 'friend' | 'pending_outgoing' | 'pending_incoming' | 'blocked' | 'none';
+export type Relation =
+  | "friend"
+  | "pending_outgoing"
+  | "pending_incoming"
+  | "blocked"
+  | "none";
 
 export interface SearchResult extends PublicProfile {
   relation: Relation;
@@ -36,7 +41,9 @@ const MAX_FUZZY_CANDIDATES = 200;
 // Classic edit-distance calculation, used to tolerate small typos in the
 // fuzzy fallback (e.g. "Ayehsa" should still find "Ayesha").
 function levenshtein(a: string, b: string): number {
-  const dp: number[][] = Array.from({ length: a.length + 1 }, () => new Array(b.length + 1).fill(0));
+  const dp: number[][] = Array.from({ length: a.length + 1 }, () =>
+    new Array(b.length + 1).fill(0),
+  );
   for (let i = 0; i <= a.length; i++) dp[i][0] = i;
   for (let j = 0; j <= b.length; j++) dp[0][j] = j;
   for (let i = 1; i <= a.length; i++) {
@@ -57,7 +64,9 @@ function levenshtein(a: string, b: string): number {
 function isCloseNameMatch(nameLower: string, term: string): boolean {
   if (nameLower.includes(term)) return true;
   const maxDistance = term.length <= 3 ? 1 : 2;
-  return nameLower.split(/\s+/).some((word) => levenshtein(word, term) <= maxDistance);
+  return nameLower
+    .split(/\s+/)
+    .some((word) => levenshtein(word, term) <= maxDistance);
 }
 
 // Friends, incoming/outgoing friend requests, and blocks, all kept live via
@@ -80,12 +89,21 @@ export function useFriends() {
     if (!uid) return;
 
     const unsubFriendships = onSnapshot(
-      query(collection(db, 'friendships'), where('participants', 'array-contains', uid)),
+      query(
+        collection(db, "friendships"),
+        where("participants", "array-contains", uid),
+      ),
       (snap) => {
         const list: FriendEntry[] = snap.docs.map((d) => {
-          const data = d.data() as { participants: string[]; participantNames?: Record<string, string> };
-          const otherUid = data.participants.find((p) => p !== uid) ?? '';
-          return { uid: otherUid, name: data.participantNames?.[otherUid] ?? 'Care Circle Member' };
+          const data = d.data() as {
+            participants: string[];
+            participantNames?: Record<string, string>;
+          };
+          const otherUid = data.participants.find((p) => p !== uid) ?? "";
+          return {
+            uid: otherUid,
+            name: data.participantNames?.[otherUid] ?? "Care Circle Member",
+          };
         });
         setFriends(list);
       },
@@ -93,33 +111,40 @@ export function useFriends() {
 
     const unsubIncoming = onSnapshot(
       query(
-        collection(db, 'friendRequests'),
-        where('toUid', '==', uid),
-        where('status', '==', 'pending'),
+        collection(db, "friendRequests"),
+        where("toUid", "==", uid),
+        where("status", "==", "pending"),
       ),
       (snap) => {
-        setIncomingRequests(snap.docs.map((d) => ({ id: d.id, ...(d.data() as any) })));
+        setIncomingRequests(
+          snap.docs.map((d) => ({ id: d.id, ...(d.data() as any) })),
+        );
       },
     );
 
     const unsubOutgoing = onSnapshot(
       query(
-        collection(db, 'friendRequests'),
-        where('fromUid', '==', uid),
-        where('status', '==', 'pending'),
+        collection(db, "friendRequests"),
+        where("fromUid", "==", uid),
+        where("status", "==", "pending"),
       ),
       (snap) => {
-        setOutgoingRequests(snap.docs.map((d) => ({ id: d.id, ...(d.data() as any) })));
+        setOutgoingRequests(
+          snap.docs.map((d) => ({ id: d.id, ...(d.data() as any) })),
+        );
       },
     );
 
     const unsubBlocked = onSnapshot(
-      query(collection(db, 'blocks'), where('blockerUid', '==', uid)),
+      query(collection(db, "blocks"), where("blockerUid", "==", uid)),
       (snap) => {
         setBlocked(
           snap.docs.map((d) => {
             const data = d.data() as any;
-            return { uid: data.blockedUid as string, name: (data.blockedName as string) || 'Blocked member' };
+            return {
+              uid: data.blockedUid as string,
+              name: (data.blockedName as string) || "Blocked member",
+            };
           }),
         );
       },
@@ -144,21 +169,40 @@ export function useFriends() {
 
       const results = new Map<string, PublicProfile>();
 
-      const [exactNameSnap, exactIdSnap, prefixSnap, tokenSnap] = await Promise.all([
-        getDocs(query(collection(db, 'publicProfiles'), where('nameLower', '==', lower), limit(10))),
-        getDocs(query(collection(db, 'publicProfiles'), where('maa42IdLower', '==', lower), limit(1))),
-        getDocs(
-          query(
-            collection(db, 'publicProfiles'),
-            where('nameLower', '>=', lower),
-            where('nameLower', '<=', lower + '\uf8ff'),
-            limit(15),
+      const [exactNameSnap, exactIdSnap, prefixSnap, tokenSnap] =
+        await Promise.all([
+          getDocs(
+            query(
+              collection(db, "publicProfiles"),
+              where("nameLower", "==", lower),
+              limit(10),
+            ),
           ),
-        ),
-        // Matches a middle/last name even when it isn't a prefix of the
-        // full name string, e.g. searching "khan" for "Ayesha Khan".
-        getDocs(query(collection(db, 'publicProfiles'), where('nameTokens', 'array-contains', lower), limit(15))),
-      ]);
+          getDocs(
+            query(
+              collection(db, "publicProfiles"),
+              where("maa42IdLower", "==", lower),
+              limit(1),
+            ),
+          ),
+          getDocs(
+            query(
+              collection(db, "publicProfiles"),
+              where("nameLower", ">=", lower),
+              where("nameLower", "<=", lower + "\uf8ff"),
+              limit(15),
+            ),
+          ),
+          // Matches a middle/last name even when it isn't a prefix of the
+          // full name string, e.g. searching "khan" for "Ayesha Khan".
+          getDocs(
+            query(
+              collection(db, "publicProfiles"),
+              where("nameTokens", "array-contains", lower),
+              limit(15),
+            ),
+          ),
+        ]);
 
       [exactNameSnap, exactIdSnap, prefixSnap, tokenSnap].forEach((snap) => {
         snap.forEach((d) => results.set(d.id, d.data() as PublicProfile));
@@ -171,7 +215,11 @@ export function useFriends() {
       // reachable through this fallback until their owner edits their name.
       if (results.size < 5 && lower.length >= 2) {
         const browseSnap = await getDocs(
-          query(collection(db, 'publicProfiles'), orderBy('nameLower'), limit(MAX_FUZZY_CANDIDATES)),
+          query(
+            collection(db, "publicProfiles"),
+            orderBy("nameLower"),
+            limit(MAX_FUZZY_CANDIDATES),
+          ),
         );
         browseSnap.forEach((d) => {
           if (results.has(d.id)) return;
@@ -192,56 +240,68 @@ export function useFriends() {
         .map((p) => ({
           ...p,
           relation: (blockedSet.has(p.uid)
-            ? 'blocked'
+            ? "blocked"
             : friendUids.has(p.uid)
-              ? 'friend'
+              ? "friend"
               : outgoingUids.has(p.uid)
-                ? 'pending_outgoing'
+                ? "pending_outgoing"
                 : incomingUids.has(p.uid)
-                  ? 'pending_incoming'
-                  : 'none') as Relation,
+                  ? "pending_incoming"
+                  : "none") as Relation,
         }));
     },
-    [friends, outgoingRequests, incomingRequests, blockedUids.join(',')],
+    [friends, outgoingRequests, incomingRequests, blockedUids.join(",")],
   );
 
-  const sendFriendRequest = useCallback(async (toUid: string, toName: string) => {
-    const me = auth.currentUser;
-    if (!me) return;
-    const requestId = `${me.uid}__${toUid}`;
-    await setDoc(doc(db, 'friendRequests', requestId), {
-      fromUid: me.uid,
-      toUid,
-      fromName: me.displayName || 'A Maa42 member',
-      toName,
-      status: 'pending',
-      createdAt: serverTimestamp(),
-    });
-    await addDoc(collection(db, 'notifications', toUid, 'items'), {
-      type: 'friend_request',
-      fromUid: me.uid,
-      fromName: me.displayName || 'A Maa42 member',
-      requestId,
-      read: false,
-      createdAt: serverTimestamp(),
-    });
-  }, []);
+  const sendFriendRequest = useCallback(
+    async (toUid: string, toName: string) => {
+      const me = auth.currentUser;
+      if (!me) return;
+
+      const requestId = `${me.uid}__${toUid}`;
+
+      await setDoc(doc(db, "friendRequests", requestId), {
+        fromUid: me.uid,
+        toUid,
+        fromName: me.displayName || "A Maa42 member",
+        toName,
+        status: "pending",
+        createdAt: serverTimestamp(),
+      });
+
+      try {
+        await addDoc(collection(db, "notifications", toUid, "items"), {
+          type: "friend_request",
+          fromUid: me.uid,
+          fromName: me.displayName || "A Maa42 member",
+          requestId,
+          read: false,
+          createdAt: serverTimestamp(),
+        });
+
+        console.log("Notification created successfully");
+      } catch (error) {
+        console.error("FAILED TO CREATE NOTIFICATION:", error);
+      }
+    },
+    [],
+  );
 
   const cancelFriendRequest = useCallback(async (requestId: string) => {
-    await deleteDoc(doc(db, 'friendRequests', requestId));
+    await deleteDoc(doc(db, "friendRequests", requestId));
   }, []);
 
   const declineFriendRequest = useCallback(async (requestId: string) => {
-    await deleteDoc(doc(db, 'friendRequests', requestId));
+    await deleteDoc(doc(db, "friendRequests", requestId));
   }, []);
 
   const acceptFriendRequest = useCallback(async (request: FriendRequest) => {
     const me = auth.currentUser;
     if (!me) return;
-    await deleteDoc(doc(db, 'friendRequests', request.id));
+    await deleteDoc(doc(db, "friendRequests", request.id));
 
     const fid = pairId(request.fromUid, request.toUid);
-    await setDoc(doc(db, 'friendships', fid), {
+    await setDoc(doc(db, "friendships", fid), {
       participants: [request.fromUid, request.toUid],
       participantNames: {
         [request.fromUid]: request.fromName,
@@ -250,8 +310,8 @@ export function useFriends() {
       createdAt: serverTimestamp(),
     });
 
-    await addDoc(collection(db, 'notifications', request.fromUid, 'items'), {
-      type: 'friend_accept',
+    await addDoc(collection(db, "notifications", request.fromUid, "items"), {
+      type: "friend_accept",
       fromUid: me.uid,
       fromName: request.toName,
       read: false,
@@ -262,7 +322,7 @@ export function useFriends() {
   const removeFriend = useCallback(async (otherUid: string) => {
     const me = auth.currentUser;
     if (!me) return;
-    await deleteDoc(doc(db, 'friendships', pairId(me.uid, otherUid)));
+    await deleteDoc(doc(db, "friendships", pairId(me.uid, otherUid)));
   }, []);
 
   // Blocking removes any existing friendship and records the block. The
@@ -272,8 +332,10 @@ export function useFriends() {
   const blockUser = useCallback(async (otherUid: string, otherName: string) => {
     const me = auth.currentUser;
     if (!me) return;
-    await deleteDoc(doc(db, 'friendships', pairId(me.uid, otherUid))).catch(() => {});
-    await setDoc(doc(db, 'blocks', pairId(me.uid, otherUid)), {
+    await deleteDoc(doc(db, "friendships", pairId(me.uid, otherUid))).catch(
+      () => {},
+    );
+    await setDoc(doc(db, "blocks", pairId(me.uid, otherUid)), {
       blockerUid: me.uid,
       blockedUid: otherUid,
       blockedName: otherName,
@@ -285,7 +347,7 @@ export function useFriends() {
   const unblockUser = useCallback(async (otherUid: string) => {
     const me = auth.currentUser;
     if (!me) return;
-    await deleteDoc(doc(db, 'blocks', pairId(me.uid, otherUid)));
+    await deleteDoc(doc(db, "blocks", pairId(me.uid, otherUid)));
   }, []);
 
   return {

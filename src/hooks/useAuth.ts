@@ -305,19 +305,12 @@ export function useAuth() {
   }, []);
 
   const requestPasswordReset = useCallback(async (email: string) => {
-    try {
-      await sendPasswordResetEmail(auth, email.trim(), {
-        // Keep users on this app for reset completion.
-        url: window.location.origin,
-      });
-    } catch (error: any) {
-      // Preserve account-enumeration protection by returning success even if the
-      // account does not exist.
-      if (error?.code === "auth/user-not-found") {
-        return;
-      }
-      throw error;
-    }
+    const actionCodeSettings = {
+      url: `${window.location.origin}/?mode=resetPassword`,
+      handleCodeInApp: false,
+    };
+
+    await sendPasswordResetEmail(auth, email.trim(), actionCodeSettings);
   }, []);
 
   const verifyResetCode = useCallback(async (oobCode: string) => {
