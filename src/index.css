@@ -1,0 +1,73 @@
+@import "tailwindcss";
+
+@theme {
+  --color-primary: #004349;
+  --color-primary-container: #0d5c63;
+  --color-on-primary: #ffffff;
+  --color-on-primary-container: #90d2da;
+  --color-primary-fixed: #abeef6;
+  --color-primary-fixed-dim: #8fd1d9;
+  --color-on-primary-fixed: #002023;
+  --color-on-primary-fixed-variant: #004f55;
+
+  --color-secondary: #a43d23;
+  --color-secondary-container: #ff8162;
+  --color-on-secondary: #ffffff;
+  --color-on-secondary-container: #731a04;
+  --color-secondary-fixed: #ffdad2;
+  --color-secondary-fixed-dim: #ffb4a2;
+  --color-on-secondary-fixed: #3c0700;
+  --color-on-secondary-fixed-variant: #83260e;
+
+  --color-tertiary: #5f2f00;
+  --color-tertiary-container: #804307;
+  --color-on-tertiary: #ffffff;
+  --color-on-tertiary-container: #ffb882;
+  --color-tertiary-fixed: #ffdcc4;
+  --color-tertiary-fixed-dim: #ffb780;
+  --color-on-tertiary-fixed: #2f1400;
+  --color-on-tertiary-fixed-variant: #6f3800;
+
+  --color-surface: #fcf9f4;
+  --color-surface-dim: #dcdad5;
+  --color-surface-bright: #fcf9f4;
+  --color-surface-container-lowest: #ffffff;
+  --color-surface-container-low: #f6f3ee;
+  --color-surface-container: #f0ede9;
+  --color-surface-container-high: #ebe8e3;
+  --color-surface-container-highest: #e5e2dd;
+  --color-surface-variant: #e5e2dd;
+  --color-surface-tint: #20686f;
+
+  --color-on-surface: #1c1c19;
+  --color-on-surface-variant: #3f484a;
+  --color-inverse-surface: #31302d;
+  --color-inverse-on-surface: #f3f0eb;
+
+  --color-outline: #6f797a;
+  --color-outline-variant: #bfc8c9;
+
+  --color-error: #ba1a1a;
+  --color-on-error: #ffffff;
+  --color-error-container: #ffdad6;
+  --color-on-error-container: #93000a;
+
+  --font-headline: "Plus Jakarta Sans", "Public Sans", -apple-system, BlinkMacSystemFont, sans-serif;
+  --font-body: "Plus Jakarta Sans", "Public Sans", -apple-system, BlinkMacSystemFont, sans-serif;
+}
+
+body {
+  font-family: var(--font-body);
+  background-color: var(--color-surface);
+  color: var(--color-on-surface);
+  min-height: 100vh;
+}
+
+/* Hide scrollbars gracefully for touch & horizontal chips */
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+.no-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
