@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useState } from "react";
+import React, { useCallback, useEffect, useRef, useState } from "react";
 import { motion, AnimatePresence } from "motion/react";
 import {
   UserProfile,
@@ -94,6 +94,12 @@ function timeAgo(iso: string | null | undefined): string {
 // "ready": MaterniBot responded — show the real dashboard.
 // "unreachable": the wake ceiling was hit — show a retry state.
 type BotAvailability = "waking" | "ready" | "unreachable";
+
+// Client-side polling for the wake check — see wakeAndLoad below. 2 minutes
+// covers even a slow cold start; 4s between checks is frequent enough to
+// feel responsive without hammering the backend while it's still booting.
+const WAKE_POLL_INTERVAL_MS = 4000;
+const WAKE_MAX_TOTAL_MS = 120000;
 
 export const BotScreen: React.FC<BotScreenProps> = ({ user }) => {
   const [availability, setAvailability] = useState<BotAvailability>("waking");
@@ -203,42 +209,72 @@ export const BotScreen: React.FC<BotScreenProps> = ({ user }) => {
     refreshSymptoms,
   ]);
 
-  // Waits on the server's retrying /api/bot/wake instead of firing all the
-  // data calls immediately — that single request stays pending through an
-  // entire MaterniBot cold start (redeploy included) and only resolves once
-  // it's actually reachable, so the skeleton below shows for exactly as
-  // long as the wake genuinely takes.
-  const wakeAndLoad = useCallback(async () => {
+  // Polls the quick /api/bot/wake check repeatedly from the browser,
+  // instead of relying on one long-held server request — a single request
+  // held open risked being cut by Render's own request-timeout before a
+  // slow MaterniBot cold start finished. A token guards against overlapping
+  // polls (e.g. the user hitting refresh mid-poll, or the component
+  // unmounting) — a stale poll simply stops updating state once superseded.
+  const wakePollTokenRef = useRef(0);
+
+  const wakeAndLoad = useCallback(() => {
+    const myToken = ++wakePollTokenRef.current;
+    const startedAt = Date.now();
     setAvailability("waking");
-    try {
-      const data = await getJson("/api/bot/wake");
-      if (data.status === "ready") {
-        setAvailability("ready");
-        refreshAll();
-      } else {
-        setAvailability("unreachable");
-        setOnline(false);
-        setStatusError(data.error || "Bot unreachable");
+
+    const poll = async () => {
+      if (wakePollTokenRef.current !== myToken) return;
+
+      try {
+        const data = await getJson("/api/bot/wake");
+        if (wakePollTokenRef.current !== myToken) return;
+
+        if (data.status === "ready") {
+          setAvailability("ready");
+          refreshAll();
+          return;
+        }
+        setStatusError(data.error || "Still waking up...");
+      } catch (err: any) {
+        if (wakePollTokenRef.current !== myToken) return;
+        setStatusError(err?.message || "Still waking up...");
       }
-    } catch (err: any) {
-      setAvailability("unreachable");
-      setOnline(false);
-      setStatusError(err?.message || "Bot unreachable");
-    }
+
+      if (Date.now() - startedAt >= WAKE_MAX_TOTAL_MS) {
+        if (wakePollTokenRef.current === myToken) {
+          setAvailability("unreachable");
+          setOnline(false);
+        }
+        return;
+      }
+
+      setTimeout(poll, WAKE_POLL_INTERVAL_MS);
+    };
+
+    poll();
   }, [refreshAll]);
+
+  const availabilityRef = useRef(availability);
+  useEffect(() => {
+    availabilityRef.current = availability;
+  }, [availability]);
 
   useEffect(() => {
     wakeAndLoad();
     // Keep status + the latest reading reasonably live without hammering
     // the bot backend — 20s is frequent enough for a desktop companion.
-    // Only runs once the bot is confirmed reachable (see the availability
-    // check inside), so it never fights with the initial wake sequence.
+    // Reads availability via a ref (not the state variable directly) since
+    // this effect only runs once on mount — a direct reference would stay
+    // frozen at "waking" forever and this check would never pass.
     const interval = setInterval(() => {
-      if (availability !== "ready") return;
+      if (availabilityRef.current !== "ready") return;
       refreshStatus();
       refreshReading();
     }, 20000);
-    return () => clearInterval(interval);
+    return () => {
+      clearInterval(interval);
+      wakePollTokenRef.current++; // cancel any in-flight wake poll
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -387,8 +423,8 @@ export const BotScreen: React.FC<BotScreenProps> = ({ user }) => {
               MaterniBot brain building...
             </h2>
             <p className="text-xs text-on-surface-variant max-w-xs">
-              Waking up your desktop companion. This can take up to a minute on
-              a cold start — hang tight.
+              Waking up your desktop companion. This can take up to two minutes
+              on a cold start — hang tight.
             </p>
           </div>
           <div className="w-full max-w-xs space-y-2 mt-1">

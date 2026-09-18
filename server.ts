@@ -340,35 +340,20 @@ async function callBot(
   }
 }
 
-// One request the frontend can await through an entire MaterniBot cold
-// start: polls /health every few seconds, up to WAKE_MAX_WAIT_MS total,
-// and only responds once MaterniBot is actually up (or the ceiling is hit).
-// This exists because a single callBot() attempt — even with the 20s
-// timeout above — can still lose the race on a genuinely slow cold start;
-// this endpoint keeps trying instead of failing after one shot.
-const WAKE_MAX_WAIT_MS = 45000;
-const WAKE_POLL_INTERVAL_MS = 3000;
-
+// A single quick check MaterniBot is up — deliberately NOT a long-held
+// retry loop (that was the previous version of this route). Render's free
+// tier appears to enforce its own request timeout that can be shorter than
+// MaterniBot's slowest cold starts, which was killing the held-open
+// connection before the retry loop ever got to succeed. Polling this
+// quickly and repeatedly from the BROWSER instead sidesteps that entirely,
+// since no single request here is ever long-lived.
 app.get("/api/bot/wake", async (_req, res) => {
-  const start = Date.now();
-
-  while (Date.now() - start < WAKE_MAX_WAIT_MS) {
-    try {
-      await callBot("/health", { method: "GET" }, 8000);
-      return res.json({ status: "ready", waitedMs: Date.now() - start });
-    } catch {
-      const remaining = WAKE_MAX_WAIT_MS - (Date.now() - start);
-      if (remaining <= 0) break;
-      await new Promise((resolve) =>
-        setTimeout(resolve, Math.min(WAKE_POLL_INTERVAL_MS, remaining)),
-      );
-    }
+  try {
+    await callBot("/health", { method: "GET" }, 10000);
+    res.json({ status: "ready" });
+  } catch (err: any) {
+    res.json({ status: "waking", error: err?.message || "Still waking up" });
   }
-
-  res.status(502).json({
-    status: "unreachable",
-    error: "MaterniBot didn't respond in time — it may still be redeploying.",
-  });
 });
 
 // Lightweight online/offline check — always returns 200 so the dashboard
