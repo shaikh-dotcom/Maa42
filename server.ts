@@ -302,13 +302,15 @@ const MATERNIBOT_API_URL =
   process.env.MATERNIBOT_API_URL || "http://localhost:8000";
 const MATERNIBOT_DEVICE_SECRET = process.env.MATERNIBOT_DEVICE_SECRET || "";
 
-// Wraps fetch with the secret header and a timeout, since the bot backend
-// may simply not be running (it's local-only right now) — we want a quick,
-// clean failure rather than the request hanging.
+// Wraps fetch with the secret header and a timeout. Render's free tier
+// spins MaterniBot down after ~15 minutes idle, and waking it back up can
+// take 15-30+ seconds — so this needs to be generous enough that the FIRST
+// request after a cold start has a real chance to succeed, not just fail
+// fast. 6s was too short and caused every route to abort mid-wake-up.
 async function callBot(
   path: string,
   init: RequestInit = {},
-  timeoutMs = 6000,
+  timeoutMs = 20000,
 ): Promise<any> {
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), timeoutMs);
@@ -342,7 +344,7 @@ async function callBot(
 // can render a status banner instead of treating "bot is off" as a crash.
 app.get("/api/bot/status", async (_req, res) => {
   try {
-    await callBot("/health", { method: "GET" }, 4000);
+    await callBot("/health", { method: "GET" }, 20000);
     res.json({ online: true });
   } catch (err: any) {
     res.json({ online: false, error: err?.message || "Bot unreachable" });
@@ -465,6 +467,39 @@ app.post("/api/bot/symptoms", async (req, res) => {
   }
 });
 
+// ---------------------------------------------------------------------------
+// MaterniBot keep-alive
+// ---------------------------------------------------------------------------
+// Render's free tier spins a service down after ~15 minutes with no
+// incoming requests. A ping every 10 minutes is enough to keep MaterniBot
+// from ever going idle long enough to fully spin down during normal usage
+// hours, which is the other half of fixing the cold-start 502s alongside
+// the wider callBot() timeout above. This does NOT guarantee MaterniBot is
+// never asleep (e.g. right after a deploy, or if Render restarts it for
+// other reasons) — the timeout increase is what covers that remaining case.
+//
+// Skipped when MATERNIBOT_API_URL still points at localhost (local dev),
+// since there's nothing on Render to keep awake in that case.
+const KEEP_ALIVE_INTERVAL_MS = 10 * 60 * 1000; // 10 minutes
+
+function startMaterniBotKeepAlive() {
+  if (MATERNIBOT_API_URL.includes("localhost")) return;
+
+  const ping = async () => {
+    try {
+      await callBot("/health", { method: "GET" }, 20000);
+      console.log("MaterniBot keep-alive ping: ok");
+    } catch (err: any) {
+      // Expected occasionally (deploys, genuine outages) — logged but never
+      // fatal, and never affects the medsophia-maa42 server's own health.
+      console.warn("MaterniBot keep-alive ping failed:", err?.message || err);
+    }
+  };
+
+  ping(); // once immediately on boot, then on the interval
+  setInterval(ping, KEEP_ALIVE_INTERVAL_MS);
+}
+
 // Vite middleware setup
 async function startServer() {
   if (process.env.NODE_ENV !== "production") {
@@ -484,6 +519,8 @@ async function startServer() {
   app.listen(PORT, "0.0.0.0", () => {
     console.log(`MedSophia Maa42 server running on port ${PORT}`);
   });
+
+  startMaterniBotKeepAlive();
 }
 console.log(
   "GROQ_API_KEY loaded:",
