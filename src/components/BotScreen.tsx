@@ -1,6 +1,12 @@
 import React, { useCallback, useEffect, useState } from "react";
 import { motion, AnimatePresence } from "motion/react";
-import { UserProfile, BotProfile, BotSensorReading, BotReminder, BotSymptomEntry } from "../types";
+import {
+  UserProfile,
+  BotProfile,
+  BotSensorReading,
+  BotReminder,
+  BotSymptomEntry,
+} from "../types";
 import {
   Cpu,
   Wifi,
@@ -44,7 +50,11 @@ async function getJson(url: string) {
   return data;
 }
 
-async function postJson(url: string, body: unknown, method: "POST" | "PATCH" = "POST") {
+async function postJson(
+  url: string,
+  body: unknown,
+  method: "POST" | "PATCH" = "POST",
+) {
   const res = await fetch(url, {
     method,
     headers: { "Content-Type": "application/json" },
@@ -57,13 +67,24 @@ async function postJson(url: string, body: unknown, method: "POST" | "PATCH" = "
 
 function timeAgo(iso: string | null | undefined): string {
   if (!iso) return "never";
-  const ms = Date.now() - new Date(iso).getTime();
+
+  // MaterniBot returns UTC timestamps without a timezone suffix.
+  // Treat timezone-less timestamps as UTC.
+  const normalizedIso =
+    iso && !/[zZ]|[+-]\d{2}:?\d{2}$/.test(iso) ? `${iso}Z` : iso;
+
+  const ms = Date.now() - new Date(normalizedIso).getTime();
+
   if (ms < 0 || Number.isNaN(ms)) return "just now";
+
   const mins = Math.floor(ms / 60000);
   if (mins < 1) return "just now";
+
   if (mins < 60) return `${mins}m ago`;
+
   const hrs = Math.floor(mins / 60);
   if (hrs < 24) return `${hrs}h ago`;
+
   return `${Math.floor(hrs / 24)}d ago`;
 }
 
@@ -114,7 +135,8 @@ export const BotScreen: React.FC<BotScreenProps> = ({ user }) => {
     try {
       const data = await getJson("/api/bot/profile");
       setBotProfile(data.profile ?? null);
-      if (data.profile?.preferred_lang) setSyncLang(data.profile.preferred_lang);
+      if (data.profile?.preferred_lang)
+        setSyncLang(data.profile.preferred_lang);
     } catch {
       setBotProfile(null);
     } finally {
@@ -164,7 +186,13 @@ export const BotScreen: React.FC<BotScreenProps> = ({ user }) => {
     refreshReading();
     refreshReminders();
     refreshSymptoms();
-  }, [refreshStatus, refreshProfile, refreshReading, refreshReminders, refreshSymptoms]);
+  }, [
+    refreshStatus,
+    refreshProfile,
+    refreshReading,
+    refreshReminders,
+    refreshSymptoms,
+  ]);
 
   useEffect(() => {
     refreshAll();
@@ -194,7 +222,9 @@ export const BotScreen: React.FC<BotScreenProps> = ({ user }) => {
       setSyncMessage("Synced to MaterniBot.");
       refreshProfile();
     } catch (err: any) {
-      setSyncMessage(err?.message || "Sync failed — is the bot backend running?");
+      setSyncMessage(
+        err?.message || "Sync failed — is the bot backend running?",
+      );
     } finally {
       setSyncing(false);
       setTimeout(() => setSyncMessage(""), 4000);
@@ -204,7 +234,11 @@ export const BotScreen: React.FC<BotScreenProps> = ({ user }) => {
   const handleAddReminder = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newReminder.message.trim()) return;
-    if (newReminder.category === "medicine" && !newReminder.medicine_name.trim()) return;
+    if (
+      newReminder.category === "medicine" &&
+      !newReminder.medicine_name.trim()
+    )
+      return;
     setAddingReminder(true);
     try {
       await postJson("/api/bot/reminders", {
@@ -242,7 +276,9 @@ export const BotScreen: React.FC<BotScreenProps> = ({ user }) => {
         {},
         "PATCH",
       );
-      setReminders((prev) => prev.filter((x) => !(x.id === r.id && x.category === r.category)));
+      setReminders((prev) =>
+        prev.filter((x) => !(x.id === r.id && x.category === r.category)),
+      );
     } catch (err: any) {
       setSyncMessage(err?.message || "Couldn't remove reminder.");
       setTimeout(() => setSyncMessage(""), 4000);
@@ -312,7 +348,9 @@ export const BotScreen: React.FC<BotScreenProps> = ({ user }) => {
           <div className="flex items-center gap-3">
             <div
               className={`w-12 h-12 rounded-2xl flex items-center justify-center shrink-0 ${
-                online ? "bg-on-primary-container/15" : "bg-surface-container-highest"
+                online
+                  ? "bg-on-primary-container/15"
+                  : "bg-surface-container-highest"
               }`}
             >
               <Cpu className="w-6 h-6" />
@@ -366,7 +404,9 @@ export const BotScreen: React.FC<BotScreenProps> = ({ user }) => {
       <section className="rounded-3xl bg-surface-container-low p-5 shadow-sm border border-surface-container mb-6">
         <div className="flex items-center gap-2 mb-4">
           <Languages className="w-4 h-4 text-primary" />
-          <h2 className="text-sm font-bold text-on-surface">Pregnancy Profile Sync</h2>
+          <h2 className="text-sm font-bold text-on-surface">
+            Pregnancy Profile Sync
+          </h2>
         </div>
 
         <div className="grid grid-cols-2 gap-3 mb-4">
@@ -375,10 +415,14 @@ export const BotScreen: React.FC<BotScreenProps> = ({ user }) => {
               On this app
             </p>
             <p className="text-sm font-bold text-on-surface">
-              {user.isPostpartum ? `Day ${user.postpartumDay}` : `Week ${user.week}`}
+              {user.isPostpartum
+                ? `Day ${user.postpartumDay}`
+                : `Week ${user.week}`}
             </p>
             <p className="text-xs text-on-surface-variant">
-              {user.dueDate ? `Due ${new Date(user.dueDate).toLocaleDateString()}` : "No due date set"}
+              {user.dueDate
+                ? `Due ${new Date(user.dueDate).toLocaleDateString()}`
+                : "No due date set"}
             </p>
           </div>
           <div className="rounded-2xl bg-surface p-3 border border-surface-container">
@@ -422,7 +466,11 @@ export const BotScreen: React.FC<BotScreenProps> = ({ user }) => {
             disabled={syncing || !user.dueDate}
             className="bg-primary text-on-primary px-4 py-2 rounded-full text-xs font-semibold shadow-sm hover:opacity-95 transition-all flex items-center gap-1.5 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed shrink-0"
           >
-            {syncing ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <RefreshCw className="w-3.5 h-3.5" />}
+            {syncing ? (
+              <Loader2 className="w-3.5 h-3.5 animate-spin" />
+            ) : (
+              <RefreshCw className="w-3.5 h-3.5" />
+            )}
             <span>Sync to Bot</span>
           </motion.button>
         </div>
@@ -435,7 +483,9 @@ export const BotScreen: React.FC<BotScreenProps> = ({ user }) => {
             Live Readings
           </h2>
           <span className="text-xs text-on-surface-variant">
-            {readingLoading ? "Loading..." : `Last reading ${timeAgo(reading?.timestamp)}`}
+            {readingLoading
+              ? "Loading..."
+              : `Last reading ${timeAgo(reading?.timestamp)}`}
           </span>
         </div>
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
@@ -450,7 +500,9 @@ export const BotScreen: React.FC<BotScreenProps> = ({ user }) => {
                   <Icon className="w-4.5 h-4.5" />
                 </div>
                 <p className="text-sm font-bold text-on-surface">{v.value}</p>
-                <p className="text-[10px] text-on-surface-variant font-medium">{v.label}</p>
+                <p className="text-[10px] text-on-surface-variant font-medium">
+                  {v.label}
+                </p>
               </div>
             );
           })}
@@ -487,7 +539,9 @@ export const BotScreen: React.FC<BotScreenProps> = ({ user }) => {
             >
               <select
                 value={newReminder.category}
-                onChange={(e) => setNewReminder((r) => ({ ...r, category: e.target.value }))}
+                onChange={(e) =>
+                  setNewReminder((r) => ({ ...r, category: e.target.value }))
+                }
                 className="bg-surface border border-surface-container rounded-full px-3 py-2 text-xs font-medium text-on-surface"
               >
                 {REMINDER_CATEGORIES.map((c) => (
@@ -502,14 +556,19 @@ export const BotScreen: React.FC<BotScreenProps> = ({ user }) => {
                   <input
                     value={newReminder.medicine_name}
                     onChange={(e) =>
-                      setNewReminder((r) => ({ ...r, medicine_name: e.target.value }))
+                      setNewReminder((r) => ({
+                        ...r,
+                        medicine_name: e.target.value,
+                      }))
                     }
                     placeholder="Medicine name"
                     className="bg-surface border border-surface-container rounded-full px-3 py-2 text-xs text-on-surface placeholder:text-on-surface-variant/60"
                   />
                   <input
                     value={newReminder.dose}
-                    onChange={(e) => setNewReminder((r) => ({ ...r, dose: e.target.value }))}
+                    onChange={(e) =>
+                      setNewReminder((r) => ({ ...r, dose: e.target.value }))
+                    }
                     placeholder="Dose (e.g. 400mg)"
                     className="bg-surface border border-surface-container rounded-full px-3 py-2 text-xs text-on-surface placeholder:text-on-surface-variant/60"
                   />
@@ -518,7 +577,9 @@ export const BotScreen: React.FC<BotScreenProps> = ({ user }) => {
 
               <input
                 value={newReminder.message}
-                onChange={(e) => setNewReminder((r) => ({ ...r, message: e.target.value }))}
+                onChange={(e) =>
+                  setNewReminder((r) => ({ ...r, message: e.target.value }))
+                }
                 placeholder={
                   newReminder.category === "medicine"
                     ? "e.g. Take after breakfast"
@@ -532,7 +593,10 @@ export const BotScreen: React.FC<BotScreenProps> = ({ user }) => {
                 <input
                   value={newReminder.interval_minutes}
                   onChange={(e) =>
-                    setNewReminder((r) => ({ ...r, interval_minutes: e.target.value }))
+                    setNewReminder((r) => ({
+                      ...r,
+                      interval_minutes: e.target.value,
+                    }))
                   }
                   type="number"
                   min={1}
@@ -547,7 +611,11 @@ export const BotScreen: React.FC<BotScreenProps> = ({ user }) => {
                 disabled={addingReminder}
                 className="bg-primary text-on-primary py-2 rounded-full text-xs font-semibold shadow-sm hover:opacity-95 transition-all flex items-center justify-center gap-1.5 cursor-pointer disabled:opacity-60"
               >
-                {addingReminder ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Plus className="w-3.5 h-3.5" />}
+                {addingReminder ? (
+                  <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                ) : (
+                  <Plus className="w-3.5 h-3.5" />
+                )}
                 <span>Save Reminder</span>
               </motion.button>
             </motion.form>
@@ -556,9 +624,13 @@ export const BotScreen: React.FC<BotScreenProps> = ({ user }) => {
 
         <div className="flex flex-col gap-2">
           {remindersLoading ? (
-            <p className="text-xs text-on-surface-variant px-1">Loading reminders...</p>
+            <p className="text-xs text-on-surface-variant px-1">
+              Loading reminders...
+            </p>
           ) : reminders.length === 0 ? (
-            <p className="text-xs text-on-surface-variant px-1">No active reminders yet.</p>
+            <p className="text-xs text-on-surface-variant px-1">
+              No active reminders yet.
+            </p>
           ) : (
             reminders.map((r) => (
               <div
@@ -573,8 +645,12 @@ export const BotScreen: React.FC<BotScreenProps> = ({ user }) => {
                     {r.category === "medicine" ? r.medicine_name : r.message}
                   </p>
                   <p className="text-[11px] text-on-surface-variant truncate">
-                    {r.category === "medicine" ? `${r.dose || ""} · ${r.frequency || ""}` : r.category}
-                    {r.next_due ? ` · next ${new Date(r.next_due).toLocaleString()}` : ""}
+                    {r.category === "medicine"
+                      ? `${r.dose || ""} · ${r.frequency || ""}`
+                      : r.category}
+                    {r.next_due
+                      ? ` · next ${new Date(r.next_due).toLocaleString()}`
+                      : ""}
                   </p>
                 </div>
                 <button
@@ -596,7 +672,10 @@ export const BotScreen: React.FC<BotScreenProps> = ({ user }) => {
           Symptom Log
         </h2>
 
-        <form onSubmit={handleLogSymptom} className="flex items-center gap-2 mb-3">
+        <form
+          onSubmit={handleLogSymptom}
+          className="flex items-center gap-2 mb-3"
+        >
           <input
             value={symptomText}
             onChange={(e) => setSymptomText(e.target.value)}
@@ -609,15 +688,23 @@ export const BotScreen: React.FC<BotScreenProps> = ({ user }) => {
             disabled={loggingSymptom || !symptomText.trim()}
             className="bg-secondary text-on-secondary px-4 py-2.5 rounded-full text-xs font-semibold shadow-sm hover:opacity-90 transition-all cursor-pointer disabled:opacity-50 shrink-0"
           >
-            {loggingSymptom ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : "Log"}
+            {loggingSymptom ? (
+              <Loader2 className="w-3.5 h-3.5 animate-spin" />
+            ) : (
+              "Log"
+            )}
           </motion.button>
         </form>
 
         <div className="flex flex-col gap-2">
           {symptomsLoading ? (
-            <p className="text-xs text-on-surface-variant px-1">Loading symptom log...</p>
+            <p className="text-xs text-on-surface-variant px-1">
+              Loading symptom log...
+            </p>
           ) : symptoms.length === 0 ? (
-            <p className="text-xs text-on-surface-variant px-1">No symptoms logged yet.</p>
+            <p className="text-xs text-on-surface-variant px-1">
+              No symptoms logged yet.
+            </p>
           ) : (
             symptoms.map((s) => (
               <div
@@ -645,7 +732,9 @@ export const BotScreen: React.FC<BotScreenProps> = ({ user }) => {
                   <p className="text-sm text-on-surface">{s.symptom_text}</p>
                   <p className="text-[11px] text-on-surface-variant mt-0.5">
                     {timeAgo(s.timestamp)}
-                    {s.red_flag ? " · flagged — consider contacting your provider" : ""}
+                    {s.red_flag
+                      ? " · flagged — consider contacting your provider"
+                      : ""}
                   </p>
                 </div>
               </div>
