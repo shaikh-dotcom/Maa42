@@ -348,11 +348,19 @@ async function callBot(
 // quickly and repeatedly from the BROWSER instead sidesteps that entirely,
 // since no single request here is ever long-lived.
 app.get("/api/bot/wake", async (_req, res) => {
+  res.set("Cache-Control", "no-store");
+
   try {
     await callBot("/health", { method: "GET" }, 10000);
-    res.json({ status: "ready" });
+
+    return res.json({
+      status: "ready",
+    });
   } catch (err: any) {
-    res.json({ status: "waking", error: err?.message || "Still waking up" });
+    return res.json({
+      status: "waking",
+      error: err?.message || "Still waking up",
+    });
   }
 });
 
@@ -496,25 +504,6 @@ app.post("/api/bot/symptoms", async (req, res) => {
 //
 // Skipped when MATERNIBOT_API_URL still points at localhost (local dev),
 // since there's nothing on Render to keep awake in that case.
-const KEEP_ALIVE_INTERVAL_MS = 10 * 60 * 1000; // 10 minutes
-
-function startMaterniBotKeepAlive() {
-  if (MATERNIBOT_API_URL.includes("localhost")) return;
-
-  const ping = async () => {
-    try {
-      await callBot("/health", { method: "GET" }, 20000);
-      console.log("MaterniBot keep-alive ping: ok");
-    } catch (err: any) {
-      // Expected occasionally (deploys, genuine outages) — logged but never
-      // fatal, and never affects the medsophia-maa42 server's own health.
-      console.warn("MaterniBot keep-alive ping failed:", err?.message || err);
-    }
-  };
-
-  ping(); // once immediately on boot, then on the interval
-  setInterval(ping, KEEP_ALIVE_INTERVAL_MS);
-}
 
 // Vite middleware setup
 async function startServer() {
@@ -535,8 +524,6 @@ async function startServer() {
   app.listen(PORT, "0.0.0.0", () => {
     console.log(`MedSophia Maa42 server running on port ${PORT}`);
   });
-
-  startMaterniBotKeepAlive();
 }
 console.log(
   "GROQ_API_KEY loaded:",
