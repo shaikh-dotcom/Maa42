@@ -423,6 +423,7 @@ export const App: React.FC = () => {
                   transition={{ duration: 0.3 }}
                 >
                   <CareCircleScreen
+                    profile={profile}
                     onOpenSosContraction={() =>
                       setSosModal({ isOpen: true, initialTab: "timer" })
                     }

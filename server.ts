@@ -238,11 +238,26 @@ app.post("/api/clinical-summary", async (req, res) => {
       ? `Day ${postpartumDay ?? 1} postpartum`
       : `Week ${week || 1}`;
 
+    // No invented defaults: if the patient hasn't logged vitals yet, say so
+    // honestly rather than fabricating a BP/weight reading that never
+    // happened. The frontend already disables this call until vitals exist,
+    // but this endpoint may be hit directly too, so it stays defensive.
+    if (!bp && !weightChange && !symptoms) {
+      return res.json({
+        summary:
+          "No vitals logged yet for this period. Log blood pressure, weight change, and any symptoms from the Care Circle tab, then regenerate.",
+        updatedAt: "Not generated",
+      });
+    }
+
     const systemPrompt =
-      "You generate concise, clean clinical summaries for OB-GYN review, formatted as bullet points for a digital telehealth dashboard.";
-    const prompt = `Generate a concise 3-bullet clinical summary for OB-GYN Dr. Ananya Sharma for a patient at ${stageLabel}.
-Input vitals: BP: ${bp || "118/76 mmHg"}, Weight change: ${weightChange || "+0.4kg this week"}, Recent symptoms: ${symptoms || "Mild lower back tension on Wednesday, resolved with stretching; daily hydration on target 7/8 glasses"}.
-Format as clean, bullet points suitable for a digital health telehealth dashboard.`;
+      "You generate concise, clean clinical summaries for OB-GYN review, formatted as bullet points for a digital telehealth dashboard. Only use the vitals/symptoms actually provided — never invent numbers that weren't given.";
+    const prompt = `Generate a concise clinical summary for OB-GYN review for a patient at ${stageLabel}.
+BP: ${bp || "not logged"}
+Weight change: ${weightChange || "not logged"}
+Recent symptoms: ${symptoms || "none reported"}
+Only include a bullet for a field if it was actually provided above — omit bullets for fields marked "not logged" or "none reported" rather than inventing a value.
+Format as clean bullet points suitable for a digital telehealth dashboard.`;
 
     try {
       const summaryText = await callGroq(systemPrompt, prompt);
@@ -259,8 +274,15 @@ Format as clean, bullet points suitable for a digital health telehealth dashboar
       console.error("Groq API error, falling back to canned summary:", groqErr);
     }
 
+    // Fallback (Groq unavailable) — reflects only what was actually logged.
+    const fallbackLines = [
+      bp ? `• BP: ${bp}` : null,
+      weightChange ? `• Weight change: ${weightChange}` : null,
+      symptoms ? `• Symptoms (${stageLabel}): ${symptoms}` : null,
+    ].filter(Boolean);
+
     return res.json({
-      summary: `• BP Average: ${bp || "118/76 mmHg"} (Optimal & Stable)\n• Weight gain: ${weightChange || "+0.4kg this week within clinical target"}\n• Maternal Wellbeing (${stageLabel}): Reported mild lower back tension on Wed; resolved with rest & stretching. Daily fetal kicks active.`,
+      summary: fallbackLines.join("\n"),
       updatedAt: "Just now",
     });
   } catch (err: any) {

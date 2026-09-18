@@ -11,6 +11,20 @@ service cloud.firestore {
       allow read, update: if isSignedIn() && request.auth.uid == userId;
       allow create: if isSignedIn() && request.auth.uid == userId;
       allow delete: if false;
+
+      // ---- Care Circle: doctors/partner, private to this user ----
+      // (Deliberately separate from friendships/publicProfiles — care team
+      // members are clinical contacts, not social-graph friends.)
+      match /careTeam/{memberId} {
+        allow read, write: if isSignedIn() && request.auth.uid == userId;
+      }
+
+      // ---- Manually logged vitals feeding the clinical summary ----
+      // Append-only: entries are never edited or deleted, only added.
+      match /vitalsLogs/{entryId} {
+        allow read, create: if isSignedIn() && request.auth.uid == userId;
+        allow update, delete: if false;
+      }
     }
 
     // ---- Public, searchable profile — no health data lives here ----

@@ -181,3 +181,16 @@ export interface BotSymptomEntry {
   severity?: string | null;
   red_flag: boolean;
 }
+
+// ---------------------------------------------------------------------------
+// Care Circle — manually logged vitals (BP/weight aren't tracked by
+// MaterniBot's sensors or anywhere else yet, so these come from a form).
+// ---------------------------------------------------------------------------
+
+export interface VitalsEntry {
+  id: string;
+  bp: string;
+  weightChange: string;
+  symptoms: string;
+  loggedAt: any;
+}

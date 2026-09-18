@@ -1,54 +1,100 @@
-import React, { useState } from 'react';
-import { motion, AnimatePresence } from 'motion/react';
-import { CareMember } from '../types';
-import { INITIAL_CARE_TEAM } from '../data';
-import { AlertCircle, Timer, Phone, FileText, Zap, MessageSquare, Video, Heart, Check, Loader2, Sparkles } from 'lucide-react';
+import React, { useState } from "react";
+import { motion, AnimatePresence } from "motion/react";
+import { CareMember, UserProfile } from "../types";
+import { useCareTeam } from "../hooks/useCareTeam";
+import { useVitals } from "../hooks/useVitals";
+import { CareTeamModal } from "./CareTeamModal";
+import {
+  AlertCircle,
+  Timer,
+  Phone,
+  FileText,
+  Zap,
+  MessageSquare,
+  Video,
+  Heart,
+  Check,
+  Loader2,
+  Sparkles,
+  ClipboardEdit,
+} from "lucide-react";
 
 interface CareCircleScreenProps {
+  profile: UserProfile;
   onOpenSosContraction: () => void;
   onOpenSosHotline: () => void;
   onPreviewPdf: (summaryText: string) => void;
-  onContactMember: (member: CareMember, mode: 'chat' | 'call') => void;
+  onContactMember: (member: CareMember, mode: "chat" | "call") => void;
 }
 
+const NO_VITALS_YET =
+  'No vitals logged yet this week. Use "Log Vitals" below, then regenerate the summary.';
+
 export const CareCircleScreen: React.FC<CareCircleScreenProps> = ({
+  profile,
   onOpenSosContraction,
   onOpenSosHotline,
   onPreviewPdf,
   onContactMember,
 }) => {
-  const [summaryText, setSummaryText] = useState(
-    "• BP Average: 118/76 mmHg (Stable & Optimal)\n• Weight gain: +0.4kg this week within target\n• Reported mild lower back tension on Wed; resolved with stretching and hydration.\n• Fetal activity regular: 12-14 movements logged daily during evening rest."
-  );
-  const [updatedTime, setUpdatedTime] = useState("Updated 2h ago");
+  const { careTeam, addMember, updateMember, removeMember } = useCareTeam();
+  const { latestVitals, logVitals } = useVitals();
+
+  const [isTeamModalOpen, setIsTeamModalOpen] = useState(false);
+  const [isVitalsFormOpen, setIsVitalsFormOpen] = useState(false);
+  const [bpDraft, setBpDraft] = useState("");
+  const [weightDraft, setWeightDraft] = useState("");
+  const [symptomsDraft, setSymptomsDraft] = useState("");
+
+  const [summaryText, setSummaryText] = useState<string>(NO_VITALS_YET);
+  const [updatedTime, setUpdatedTime] = useState("Not generated yet");
   const [isSyncing, setIsSyncing] = useState(false);
   const [syncedSuccess, setSyncedSuccess] = useState(false);
 
+  const stageLabel = profile.isPostpartum
+    ? `Day ${profile.postpartumDay ?? 1} postpartum`
+    : `Week ${profile.week || 1}`;
+
+  const handleSaveVitals = async () => {
+    if (!bpDraft.trim() && !weightDraft.trim() && !symptomsDraft.trim()) return;
+    await logVitals(bpDraft, weightDraft, symptomsDraft);
+    setBpDraft("");
+    setWeightDraft("");
+    setSymptomsDraft("");
+    setIsVitalsFormOpen(false);
+  };
+
   const handleRegenerateSummary = async () => {
+    if (!latestVitals) {
+      setSummaryText(NO_VITALS_YET);
+      return;
+    }
+
     setIsSyncing(true);
     try {
-      const res = await fetch('/api/clinical-summary', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+      const res = await fetch("/api/clinical-summary", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          bp: "116/74 mmHg",
-          weightChange: "+0.5kg this week",
-          week: 24,
-          symptoms: "Mild pelvic pressure during evening, resolved after lying down and hydration."
-        })
+          bp: latestVitals.bp || undefined,
+          weightChange: latestVitals.weightChange || undefined,
+          symptoms: latestVitals.symptoms || undefined,
+          week: profile.week,
+          isPostpartum: profile.isPostpartum,
+          postpartumDay: profile.postpartumDay,
+        }),
       });
       if (res.ok) {
         const data = await res.json();
         setSummaryText(data.summary);
-        setUpdatedTime("Updated just now");
+        setUpdatedTime(data.updatedAt || "Updated just now");
+        setSyncedSuccess(true);
+        setTimeout(() => setSyncedSuccess(false), 3500);
       }
     } catch (e) {
-      setSummaryText("• BP Average: 116/74 mmHg (Optimal)\n• Weight gain: +0.5kg within clinical parameters\n• Symptoms: Mild pelvic pressure resolving with rest; baby kick count active.");
-      setUpdatedTime("Updated just now");
+      console.error("Failed to generate clinical summary:", e);
     } finally {
       setIsSyncing(false);
-      setSyncedSuccess(true);
-      setTimeout(() => setSyncedSuccess(false), 3500);
     }
   };
 
@@ -57,17 +103,14 @@ export const CareCircleScreen: React.FC<CareCircleScreenProps> = ({
       initial={{ opacity: 0, y: 8 }}
       animate={{ opacity: 1, y: 0 }}
       exit={{ opacity: 0, y: -8 }}
-      transition={{ duration: 0.35, ease: 'easeOut' }}
+      transition={{ duration: 0.35, ease: "easeOut" }}
       className="w-full max-w-2xl mx-auto px-4 sm:px-6 pt-2 pb-28 flex flex-col"
     >
       {/* Top Welcome & Status Banner */}
       <div className="bg-primary-container text-on-primary-container p-6 rounded-3xl shadow-sm mb-6 relative overflow-hidden flex flex-col justify-between border border-primary/20">
         <motion.div
-          animate={{
-            scale: [1, 1.25, 1],
-            opacity: [0.1, 0.25, 0.1],
-          }}
-          transition={{ duration: 5, repeat: Infinity, ease: 'easeInOut' }}
+          animate={{ scale: [1, 1.25, 1], opacity: [0.1, 0.25, 0.1] }}
+          transition={{ duration: 5, repeat: Infinity, ease: "easeInOut" }}
           className="absolute -right-8 -bottom-8 w-40 h-40 bg-secondary rounded-full blur-2xl pointer-events-none"
         />
         <div className="relative z-10">
@@ -77,14 +120,15 @@ export const CareCircleScreen: React.FC<CareCircleScreenProps> = ({
             </span>
             <span className="flex items-center gap-1.5 text-xs font-medium text-primary-fixed">
               <span className="w-2 h-2 rounded-full bg-primary-fixed animate-ping" />
-              <span>Clinical Team Active</span>
+              <span>{stageLabel}</span>
             </span>
           </div>
           <h2 className="text-xl font-bold text-on-primary mb-1">
             Your Care Circle is Synchronized
           </h2>
           <p className="text-sm text-on-primary-container/95 leading-relaxed">
-            Collaborative maternal care updates, direct escalation paths, and automated telehealth summaries for Dr. Sharma and Dr. Vance.
+            Collaborative maternal care updates, direct escalation paths, and
+            automated telehealth summaries for your care team.
           </p>
         </div>
       </div>
@@ -104,7 +148,8 @@ export const CareCircleScreen: React.FC<CareCircleScreenProps> = ({
                 Urgent Triage &amp; SOS Escalation
               </h3>
               <p className="text-xs text-on-error-container/85">
-                Experiencing severe symptoms? Connect instantly with on-call triage.
+                Experiencing severe symptoms? Connect instantly with on-call
+                triage.
               </p>
             </div>
           </div>
@@ -121,7 +166,9 @@ export const CareCircleScreen: React.FC<CareCircleScreenProps> = ({
               <Timer className="w-5 h-5 text-secondary animate-pulse" />
               <span>Contraction Timer &amp; Triage</span>
             </div>
-            <span className="text-xs text-on-surface-variant font-bold">&rarr;</span>
+            <span className="text-xs text-on-surface-variant font-bold">
+              &rarr;
+            </span>
           </motion.button>
 
           <motion.button
@@ -131,7 +178,10 @@ export const CareCircleScreen: React.FC<CareCircleScreenProps> = ({
             className="flex items-center justify-between bg-error text-on-error px-4 py-3.5 rounded-2xl font-semibold text-sm shadow-md hover:opacity-95 transition-all cursor-pointer"
           >
             <div className="flex items-center gap-3">
-              <Phone className="w-5 h-5 text-on-error fill-current animate-bounce" style={{ animationDuration: '2s' }} />
+              <Phone
+                className="w-5 h-5 text-on-error fill-current animate-bounce"
+                style={{ animationDuration: "2s" }}
+              />
               <span>Instant OB Triage Hotline</span>
             </div>
             <span className="text-xs bg-on-error/20 px-2 py-0.5 rounded-full text-on-error font-bold">
@@ -149,18 +199,19 @@ export const CareCircleScreen: React.FC<CareCircleScreenProps> = ({
               <FileText className="w-5 h-5" />
             </div>
             <div>
-              <h3 className="text-base font-bold text-on-surface">Telehealth Clinical Summary</h3>
+              <h3 className="text-base font-bold text-on-surface">
+                Telehealth Clinical Summary
+              </h3>
               <p className="text-xs text-on-surface-variant">
-                AI-generated digest of your last 7 days for Dr. Sharma
+                AI-generated digest from your logged vitals ({stageLabel})
               </p>
             </div>
           </div>
           <span className="bg-primary/10 text-primary text-xs px-2.5 py-1 rounded-full font-bold">
-            Ready
+            {latestVitals ? "Ready" : "Needs Vitals"}
           </span>
         </div>
 
-        {/* Shimmer loading skeleton when regenerating */}
         {isSyncing ? (
           <motion.div
             initial={{ opacity: 0 }}
@@ -172,7 +223,9 @@ export const CareCircleScreen: React.FC<CareCircleScreenProps> = ({
                 <Sparkles className="w-3.5 h-3.5 animate-spin" />
                 <span>AI Clinical Digest Generating...</span>
               </span>
-              <span className="text-[11px] text-on-surface-variant">Analyzing vitals &amp; logs</span>
+              <span className="text-[11px] text-on-surface-variant">
+                Analyzing logged vitals
+              </span>
             </div>
             <div className="h-4 bg-surface-container rounded-md w-3/4 animate-pulse" />
             <div className="h-4 bg-surface-container rounded-md w-full animate-pulse" />
@@ -181,7 +234,7 @@ export const CareCircleScreen: React.FC<CareCircleScreenProps> = ({
         ) : (
           <div className="bg-surface p-4 rounded-2xl text-xs text-on-surface-variant space-y-2 border border-surface-container shadow-xs">
             <div className="flex justify-between items-center font-semibold text-on-surface pb-2 border-b border-surface-container">
-              <span>Digest Period: Week 23-24</span>
+              <span>Digest Period: {stageLabel}</span>
               <span className="text-primary font-bold">{updatedTime}</span>
             </div>
             <div className="whitespace-pre-line leading-relaxed text-on-surface font-mono text-[11px]">
@@ -199,40 +252,87 @@ export const CareCircleScreen: React.FC<CareCircleScreenProps> = ({
               className="p-2.5 bg-primary-fixed text-on-primary-fixed rounded-2xl text-xs font-semibold flex items-center gap-2"
             >
               <Check className="w-4 h-4 text-primary shrink-0" />
-              <span>Summary successfully generated and transmitted to Dr. Sharma!</span>
+              <span>Summary successfully generated and ready to share!</span>
             </motion.div>
           )}
         </AnimatePresence>
 
-        <div className="flex flex-col sm:flex-row items-center gap-3">
-          <motion.button
-            whileTap={{ scale: 0.98 }}
-            onClick={handleRegenerateSummary}
-            disabled={isSyncing}
-            className="w-full sm:flex-1 bg-primary text-on-primary py-3 px-4 rounded-full text-xs font-semibold shadow-sm hover:opacity-95 transition-all flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50"
-          >
-            {isSyncing ? (
-              <>
-                <Loader2 className="w-4 h-4 animate-spin" />
-                <span>Syncing with Dr. Sharma...</span>
-              </>
-            ) : (
-              <>
-                <Zap className="w-4 h-4" />
-                <span>Regenerate &amp; Sync with Care Team</span>
-              </>
-            )}
-          </motion.button>
+        {isVitalsFormOpen ? (
+          <div className="bg-surface p-4 rounded-2xl border border-surface-container flex flex-col gap-2.5">
+            <input
+              className="bg-surface-container-low border border-surface-container rounded-xl px-3 py-2.5 text-sm text-on-surface"
+              placeholder="Blood pressure (e.g. 118/76 mmHg)"
+              value={bpDraft}
+              onChange={(e) => setBpDraft(e.target.value)}
+            />
+            <input
+              className="bg-surface-container-low border border-surface-container rounded-xl px-3 py-2.5 text-sm text-on-surface"
+              placeholder="Weight change (e.g. +0.4kg this week)"
+              value={weightDraft}
+              onChange={(e) => setWeightDraft(e.target.value)}
+            />
+            <textarea
+              className="bg-surface-container-low border border-surface-container rounded-xl px-3 py-2.5 text-sm text-on-surface resize-none"
+              placeholder="Any symptoms to note?"
+              rows={2}
+              value={symptomsDraft}
+              onChange={(e) => setSymptomsDraft(e.target.value)}
+            />
+            <div className="flex gap-2 mt-1">
+              <button
+                onClick={() => setIsVitalsFormOpen(false)}
+                className="flex-1 bg-surface-container text-on-surface py-2.5 rounded-full text-xs font-semibold cursor-pointer"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleSaveVitals}
+                className="flex-1 bg-primary text-on-primary py-2.5 rounded-full text-xs font-semibold cursor-pointer"
+              >
+                Save Vitals
+              </button>
+            </div>
+          </div>
+        ) : (
+          <div className="flex flex-col sm:flex-row items-center gap-3">
+            <motion.button
+              whileTap={{ scale: 0.98 }}
+              onClick={() => setIsVitalsFormOpen(true)}
+              className="w-full sm:w-auto bg-surface text-on-surface px-5 py-3 rounded-full text-xs font-semibold shadow-sm hover:bg-surface-bright transition-all flex items-center justify-center gap-2 cursor-pointer border border-surface-container"
+            >
+              <ClipboardEdit className="w-4 h-4" />
+              <span>Log Vitals</span>
+            </motion.button>
 
-          <motion.button
-            whileHover={{ scale: 1.02 }}
-            whileTap={{ scale: 0.98 }}
-            onClick={() => onPreviewPdf(summaryText)}
-            className="w-full sm:w-auto bg-surface text-on-surface px-5 py-3 rounded-full text-xs font-semibold shadow-sm hover:bg-surface-bright transition-all cursor-pointer border border-surface-container"
-          >
-            Preview PDF
-          </motion.button>
-        </div>
+            <motion.button
+              whileTap={{ scale: 0.98 }}
+              onClick={handleRegenerateSummary}
+              disabled={isSyncing || !latestVitals}
+              className="w-full sm:flex-1 bg-primary text-on-primary py-3 px-4 rounded-full text-xs font-semibold shadow-sm hover:opacity-95 transition-all flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50"
+            >
+              {isSyncing ? (
+                <>
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                  <span>Generating...</span>
+                </>
+              ) : (
+                <>
+                  <Zap className="w-4 h-4" />
+                  <span>Regenerate Summary</span>
+                </>
+              )}
+            </motion.button>
+
+            <motion.button
+              whileHover={{ scale: 1.02 }}
+              whileTap={{ scale: 0.98 }}
+              onClick={() => onPreviewPdf(summaryText)}
+              className="w-full sm:w-auto bg-surface text-on-surface px-5 py-3 rounded-full text-xs font-semibold shadow-sm hover:bg-surface-bright transition-all cursor-pointer border border-surface-container"
+            >
+              Preview PDF
+            </motion.button>
+          </div>
+        )}
       </div>
 
       {/* Your Care Team Section */}
@@ -240,15 +340,29 @@ export const CareCircleScreen: React.FC<CareCircleScreenProps> = ({
         <div className="flex items-center justify-between mb-4">
           <h3 className="text-lg font-bold text-on-surface">Your Care Team</h3>
           <button
-            onClick={() => alert("Care Circle Settings: You can add doulas, lactation consultants, or family members to receive automatic updates.")}
+            onClick={() => setIsTeamModalOpen(true)}
             className="text-xs font-semibold text-primary hover:underline cursor-pointer"
           >
             Manage Circle
           </button>
         </div>
 
+        {careTeam.length === 0 && (
+          <div className="bg-surface-container-low p-6 rounded-3xl border border-surface-container text-center">
+            <p className="text-sm text-on-surface-variant mb-3">
+              Your Care Circle is empty.
+            </p>
+            <button
+              onClick={() => setIsTeamModalOpen(true)}
+              className="text-sm font-semibold text-primary hover:underline cursor-pointer"
+            >
+              Add your first care team member
+            </button>
+          </div>
+        )}
+
         <div className="grid grid-cols-1 gap-4">
-          {INITIAL_CARE_TEAM.map((member) => (
+          {careTeam.map((member) => (
             <motion.div
               key={member.id}
               whileHover={{ y: -2 }}
@@ -262,7 +376,7 @@ export const CareCircleScreen: React.FC<CareCircleScreenProps> = ({
                     alt={member.name}
                     referrerPolicy="no-referrer"
                   />
-                  {member.role.toLowerCase().includes('ob') && (
+                  {member.role.toLowerCase().includes("ob") && (
                     <span className="absolute bottom-0 right-0 w-3.5 h-3.5 rounded-full bg-primary border-2 border-surface flex items-center justify-center">
                       <span className="w-1.5 h-1.5 rounded-full bg-white animate-ping" />
                     </span>
@@ -270,12 +384,16 @@ export const CareCircleScreen: React.FC<CareCircleScreenProps> = ({
                 </div>
                 <div>
                   <div className="flex items-center gap-2">
-                    <h4 className="text-sm font-bold text-on-surface">{member.name}</h4>
+                    <h4 className="text-sm font-bold text-on-surface">
+                      {member.name}
+                    </h4>
                     <span className="bg-primary/10 text-primary text-[10px] font-bold px-2 py-0.5 rounded-full">
                       {member.badge}
                     </span>
                   </div>
-                  <p className="text-xs text-on-surface-variant mt-0.5">{member.facility}</p>
+                  <p className="text-xs text-on-surface-variant mt-0.5">
+                    {member.facility}
+                  </p>
                   <div className="flex items-center gap-1.5 mt-1 text-xs text-primary font-medium">
                     <span className="w-1.5 h-1.5 rounded-full bg-primary" />
                     <span>{member.nextAppointment}</span>
@@ -287,7 +405,7 @@ export const CareCircleScreen: React.FC<CareCircleScreenProps> = ({
                 {member.canMessage && (
                   <motion.button
                     whileTap={{ scale: 0.9 }}
-                    onClick={() => onContactMember(member, 'chat')}
+                    onClick={() => onContactMember(member, "chat")}
                     className="w-10 h-10 rounded-full bg-surface-container flex items-center justify-center text-primary hover:bg-primary hover:text-on-primary transition-all shadow-xs cursor-pointer"
                     title={`Send message to ${member.name}`}
                   >
@@ -297,17 +415,21 @@ export const CareCircleScreen: React.FC<CareCircleScreenProps> = ({
                 {member.canCall && (
                   <motion.button
                     whileTap={{ scale: 0.9 }}
-                    onClick={() => onContactMember(member, 'call')}
+                    onClick={() => onContactMember(member, "call")}
                     className="w-10 h-10 rounded-full bg-surface-container flex items-center justify-center text-primary hover:bg-primary hover:text-on-primary transition-all shadow-xs cursor-pointer"
                     title={`Video call ${member.name}`}
                   >
                     <Video className="w-4 h-4" />
                   </motion.button>
                 )}
-                {member.id === 'rohan-partner' && (
+                {member.id === "rohan-partner" && (
                   <motion.button
                     whileTap={{ scale: 0.9 }}
-                    onClick={() => alert("Partner Love Tap: Sent a warm notification to Rohan!")}
+                    onClick={() =>
+                      alert(
+                        `Partner Love Tap: Sent a warm notification to ${member.name}!`,
+                      )
+                    }
                     className="w-10 h-10 rounded-full bg-surface-container flex items-center justify-center text-secondary hover:bg-secondary hover:text-on-secondary transition-all shadow-xs cursor-pointer"
                     title="Send Partner Love Tap"
                   >
@@ -320,10 +442,13 @@ export const CareCircleScreen: React.FC<CareCircleScreenProps> = ({
         </div>
       </div>
 
-      {/* Upcoming Care Schedule */}
+      {/* Upcoming Care Schedule — intentionally static for now (no real
+          appointments data source exists yet; see project notes) */}
       <div className="bg-surface-container-low p-6 rounded-3xl shadow-sm border border-surface-container">
         <div className="flex items-center justify-between mb-4">
-          <h3 className="text-base font-bold text-on-surface">Upcoming Care Schedule</h3>
+          <h3 className="text-base font-bold text-on-surface">
+            Upcoming Care Schedule
+          </h3>
           <span className="text-xs font-semibold text-primary">View All</span>
         </div>
 
@@ -364,7 +489,9 @@ export const CareCircleScreen: React.FC<CareCircleScreenProps> = ({
                 <h4 className="text-sm font-bold text-on-surface">
                   Virtual Nutrition &amp; Wellness Session
                 </h4>
-                <p className="text-xs text-on-surface-variant">Online Care Circle Group</p>
+                <p className="text-xs text-on-surface-variant">
+                  Online Care Circle Group
+                </p>
               </div>
             </div>
             <span className="bg-secondary/10 text-secondary text-xs font-bold px-3 py-1 rounded-full shrink-0">
@@ -373,6 +500,15 @@ export const CareCircleScreen: React.FC<CareCircleScreenProps> = ({
           </motion.div>
         </div>
       </div>
+
+      <CareTeamModal
+        isOpen={isTeamModalOpen}
+        onClose={() => setIsTeamModalOpen(false)}
+        careTeam={careTeam}
+        onAdd={addMember}
+        onUpdate={updateMember}
+        onRemove={removeMember}
+      />
     </motion.div>
   );
 };
