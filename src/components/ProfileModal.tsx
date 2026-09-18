@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { X, User, Calendar, LogOut, Check, Copy } from "lucide-react";
+import { X, Calendar, LogOut, Check, Copy } from "lucide-react";
 import { UserProfile } from "../types";
 
 interface ProfileModalProps {
@@ -17,7 +17,6 @@ export const ProfileModal: React.FC<ProfileModalProps> = ({
   onClose,
   onGoToLanding,
 }) => {
-  const [name, setName] = useState(user.name);
   const [isPostpartum, setIsPostpartum] = useState(user.isPostpartum);
   const [week, setWeek] = useState(user.week);
   const [postpartumDay, setPostpartumDay] = useState(user.postpartumDay);
@@ -28,9 +27,10 @@ export const ProfileModal: React.FC<ProfileModalProps> = ({
 
   if (!isOpen) return null;
 
+  const displayName = user.name?.trim() || "Maa";
+
   const handleSave = () => {
     onUpdateUser({
-      name,
       isPostpartum,
       week,
       postpartumDay,
@@ -71,14 +71,15 @@ export const ProfileModal: React.FC<ProfileModalProps> = ({
           <X className="w-4 h-4" />
         </button>
 
+        {/* Profile header */}
         <div className="flex items-center gap-3 mb-5">
           <div className="w-12 h-12 rounded-full bg-primary text-on-primary flex items-center justify-center font-bold text-lg">
-            {name.charAt(0).toUpperCase()}
+            {displayName.charAt(0).toUpperCase()}
           </div>
 
           <div className="min-w-0">
             <h3 className="text-base font-bold text-on-surface truncate">
-              {name}
+              {displayName}
             </h3>
 
             <p className="text-xs text-primary font-medium">
@@ -202,20 +203,6 @@ export const ProfileModal: React.FC<ProfileModalProps> = ({
               />
             </div>
           )}
-
-          {/* Name edit */}
-          <div>
-            <label className="font-bold text-on-surface-variant block mb-1 uppercase tracking-wider text-[11px]">
-              Full Name
-            </label>
-
-            <input
-              type="text"
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              className="w-full bg-surface-container-low px-3.5 py-2.5 rounded-xl border border-surface-container text-on-surface focus:outline-none focus:ring-2 focus:ring-primary"
-            />
-          </div>
 
           {/* Notifications */}
           <div className="flex items-center justify-between py-1">

@@ -65,18 +65,29 @@ export async function openConversation(
   myName: string,
 ): Promise<string> {
   const me = auth.currentUser;
-  if (!me) throw new Error("Not signed in");
+
+  if (!me) {
+    throw new Error("Not signed in");
+  }
+
   const id = pairId(me.uid, otherUid);
+
   const ref = doc(db, "conversations", id);
-  const snap = await getDoc(ref);
-  if (!snap.exists()) {
-    await setDoc(ref, {
+
+  await setDoc(
+    ref,
+    {
       participants: [me.uid, otherUid],
-      participantNames: { [me.uid]: myName, [otherUid]: otherName },
+      participantNames: {
+        [me.uid]: myName,
+        [otherUid]: otherName,
+      },
       lastMessage: null,
       updatedAt: serverTimestamp(),
-    });
-  }
+    },
+    { merge: true },
+  );
+
   return id;
 }
 

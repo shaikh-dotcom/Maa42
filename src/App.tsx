@@ -132,7 +132,13 @@ export const App: React.FC = () => {
       setCurrentScreen("home");
       setDidInitialAuthRedirect(true);
     }
-  }, [authLoading, currentUser, profile, currentScreen, didInitialAuthRedirect]);
+  }, [
+    authLoading,
+    currentUser,
+    profile,
+    currentScreen,
+    didInitialAuthRedirect,
+  ]);
 
   // Handle Firebase Auth email reset links (mode=resetPassword&oobCode=...).
   useEffect(() => {
@@ -175,13 +181,14 @@ export const App: React.FC = () => {
     persistProfile(updated);
   };
 
-  const handleSignOut = () => {
-    signOutUser();
+  const handleSignOut = async () => {
+    await signOutUser();
     setCurrentScreen("landing");
   };
 
   const handleGoToLanding = () => {
     setCurrentScreen("landing");
+    window.scrollTo({ top: 0, behavior: "smooth" });
   };
 
   // Fixes the old bug where every track played a hardcoded 216Hz tone: we
@@ -502,7 +509,7 @@ export const App: React.FC = () => {
         user={user}
         onUpdateUser={handleUpdateUser}
         onClose={() => setProfileModalOpen(false)}
-        onGoToLanding={handleSignOut}
+        onGoToLanding={handleGoToLanding}
       />
 
       <ResourcesModal
