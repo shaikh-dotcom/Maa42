@@ -340,6 +340,37 @@ async function callBot(
   }
 }
 
+// One request the frontend can await through an entire MaterniBot cold
+// start: polls /health every few seconds, up to WAKE_MAX_WAIT_MS total,
+// and only responds once MaterniBot is actually up (or the ceiling is hit).
+// This exists because a single callBot() attempt — even with the 20s
+// timeout above — can still lose the race on a genuinely slow cold start;
+// this endpoint keeps trying instead of failing after one shot.
+const WAKE_MAX_WAIT_MS = 45000;
+const WAKE_POLL_INTERVAL_MS = 3000;
+
+app.get("/api/bot/wake", async (_req, res) => {
+  const start = Date.now();
+
+  while (Date.now() - start < WAKE_MAX_WAIT_MS) {
+    try {
+      await callBot("/health", { method: "GET" }, 8000);
+      return res.json({ status: "ready", waitedMs: Date.now() - start });
+    } catch {
+      const remaining = WAKE_MAX_WAIT_MS - (Date.now() - start);
+      if (remaining <= 0) break;
+      await new Promise((resolve) =>
+        setTimeout(resolve, Math.min(WAKE_POLL_INTERVAL_MS, remaining)),
+      );
+    }
+  }
+
+  res.status(502).json({
+    status: "unreachable",
+    error: "MaterniBot didn't respond in time — it may still be redeploying.",
+  });
+});
+
 // Lightweight online/offline check — always returns 200 so the dashboard
 // can render a status banner instead of treating "bot is off" as a crash.
 app.get("/api/bot/status", async (_req, res) => {

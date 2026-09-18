@@ -23,6 +23,7 @@ import {
   AlertTriangle,
   Languages,
   Loader2,
+  BrainCircuit,
 } from "lucide-react";
 
 interface BotScreenProps {
@@ -88,7 +89,15 @@ function timeAgo(iso: string | null | undefined): string {
   return `${Math.floor(hrs / 24)}d ago`;
 }
 
+// "waking": polling /api/bot/wake, hasn't heard back yet — show the brain-
+// building skeleton.
+// "ready": MaterniBot responded — show the real dashboard.
+// "unreachable": the wake ceiling was hit — show a retry state.
+type BotAvailability = "waking" | "ready" | "unreachable";
+
 export const BotScreen: React.FC<BotScreenProps> = ({ user }) => {
+  const [availability, setAvailability] = useState<BotAvailability>("waking");
+
   const [online, setOnline] = useState<boolean | null>(null);
   const [statusError, setStatusError] = useState<string>("");
 
@@ -194,11 +203,38 @@ export const BotScreen: React.FC<BotScreenProps> = ({ user }) => {
     refreshSymptoms,
   ]);
 
+  // Waits on the server's retrying /api/bot/wake instead of firing all the
+  // data calls immediately — that single request stays pending through an
+  // entire MaterniBot cold start (redeploy included) and only resolves once
+  // it's actually reachable, so the skeleton below shows for exactly as
+  // long as the wake genuinely takes.
+  const wakeAndLoad = useCallback(async () => {
+    setAvailability("waking");
+    try {
+      const data = await getJson("/api/bot/wake");
+      if (data.status === "ready") {
+        setAvailability("ready");
+        refreshAll();
+      } else {
+        setAvailability("unreachable");
+        setOnline(false);
+        setStatusError(data.error || "Bot unreachable");
+      }
+    } catch (err: any) {
+      setAvailability("unreachable");
+      setOnline(false);
+      setStatusError(err?.message || "Bot unreachable");
+    }
+  }, [refreshAll]);
+
   useEffect(() => {
-    refreshAll();
+    wakeAndLoad();
     // Keep status + the latest reading reasonably live without hammering
     // the bot backend — 20s is frequent enough for a desktop companion.
+    // Only runs once the bot is confirmed reachable (see the availability
+    // check inside), so it never fights with the initial wake sequence.
     const interval = setInterval(() => {
+      if (availability !== "ready") return;
       refreshStatus();
       refreshReading();
     }, 20000);
@@ -328,6 +364,90 @@ export const BotScreen: React.FC<BotScreenProps> = ({ user }) => {
     },
   ];
 
+  // --- Waking skeleton -----------------------------------------------
+  if (availability === "waking") {
+    return (
+      <motion.div
+        initial={{ opacity: 0, y: 8 }}
+        animate={{ opacity: 1, y: 0 }}
+        exit={{ opacity: 0, y: -8 }}
+        transition={{ duration: 0.35, ease: "easeOut" }}
+        className="w-full max-w-2xl mx-auto px-4 sm:px-6 pt-2 pb-28 flex flex-col"
+      >
+        <section className="rounded-3xl bg-surface-container-low p-8 shadow-md border border-surface-container flex flex-col items-center text-center gap-4">
+          <motion.div
+            animate={{ scale: [1, 1.08, 1] }}
+            transition={{ duration: 1.6, repeat: Infinity, ease: "easeInOut" }}
+            className="w-16 h-16 rounded-full bg-primary/10 text-primary flex items-center justify-center"
+          >
+            <BrainCircuit className="w-8 h-8" />
+          </motion.div>
+          <div>
+            <h2 className="text-base font-bold text-on-surface mb-1">
+              MaterniBot brain building...
+            </h2>
+            <p className="text-xs text-on-surface-variant max-w-xs">
+              Waking up your desktop companion. This can take up to a minute on
+              a cold start — hang tight.
+            </p>
+          </div>
+          <div className="w-full max-w-xs space-y-2 mt-1">
+            <div className="h-3 bg-surface-container rounded-full w-full animate-pulse" />
+            <div className="h-3 bg-surface-container rounded-full w-5/6 mx-auto animate-pulse" />
+            <div className="h-3 bg-surface-container rounded-full w-2/3 mx-auto animate-pulse" />
+          </div>
+        </section>
+
+        {/* Ghost placeholders so the layout doesn't jump once data arrives */}
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mt-6">
+          {[0, 1, 2, 3].map((i) => (
+            <div
+              key={i}
+              className="rounded-3xl bg-surface-container-low p-4 border border-surface-container h-24 animate-pulse"
+            />
+          ))}
+        </div>
+      </motion.div>
+    );
+  }
+
+  // --- Unreachable state -----------------------------------------------
+  if (availability === "unreachable") {
+    return (
+      <motion.div
+        initial={{ opacity: 0, y: 8 }}
+        animate={{ opacity: 1, y: 0 }}
+        exit={{ opacity: 0, y: -8 }}
+        transition={{ duration: 0.35, ease: "easeOut" }}
+        className="w-full max-w-2xl mx-auto px-4 sm:px-6 pt-2 pb-28 flex flex-col"
+      >
+        <section className="rounded-3xl bg-surface-container-low p-8 shadow-md border border-surface-container flex flex-col items-center text-center gap-4">
+          <div className="w-14 h-14 rounded-full bg-surface-container-highest flex items-center justify-center">
+            <WifiOff className="w-6 h-6 text-outline" />
+          </div>
+          <div>
+            <h2 className="text-base font-bold text-on-surface mb-1">
+              MaterniBot is unreachable
+            </h2>
+            <p className="text-xs text-on-surface-variant max-w-xs">
+              {statusError ||
+                "Couldn't wake the bot backend. It may still be redeploying — try again in a moment."}
+            </p>
+          </div>
+          <motion.button
+            whileTap={{ scale: 0.95 }}
+            onClick={wakeAndLoad}
+            className="bg-primary text-on-primary px-5 py-2.5 rounded-full text-xs font-semibold shadow-sm hover:opacity-95 transition-all flex items-center gap-2 cursor-pointer"
+          >
+            <RefreshCw className="w-4 h-4" />
+            <span>Try Again</span>
+          </motion.button>
+        </section>
+      </motion.div>
+    );
+  }
+
+  // --- Ready: normal dashboard -----------------------------------------
   return (
     <motion.div
       initial={{ opacity: 0, y: 8 }}
@@ -377,7 +497,7 @@ export const BotScreen: React.FC<BotScreenProps> = ({ user }) => {
           </div>
           <motion.button
             whileTap={{ scale: 0.92 }}
-            onClick={refreshAll}
+            onClick={wakeAndLoad}
             className="w-9 h-9 rounded-full bg-surface/60 hover:bg-surface/90 flex items-center justify-center shrink-0 cursor-pointer transition-colors"
             aria-label="Refresh"
           >
