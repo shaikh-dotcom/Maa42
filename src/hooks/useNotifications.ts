@@ -1,22 +1,22 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import {
   collection,
-  deleteDoc,
   doc,
   limit,
   onSnapshot,
   orderBy,
   query,
-  updateDoc,
+  writeBatch,
 } from "firebase/firestore";
-import { auth, db } from "../firebase";
+import { db } from "../firebase";
 import { AppNotification } from "../types";
+import { useAuthUid } from "./useAuthUid";
 
 export function useNotifications() {
   const [notifications, setNotifications] = useState<AppNotification[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const uid = auth.currentUser?.uid ?? null;
+  const uid = useAuthUid();
 
   useEffect(() => {
     if (!uid) {
@@ -40,7 +40,8 @@ export function useNotifications() {
         );
         setIsLoading(false);
       },
-      () => {
+      (err) => {
+        console.error("useNotifications: listener failed", err);
         setNotifications([]);
         setError("Unable to load notifications right now.");
         setIsLoading(false);
@@ -51,31 +52,45 @@ export function useNotifications() {
 
   const unreadCount = notifications.filter((n) => !n.read).length;
 
-  const markAsRead = async (id: string) => {
-    const uid = auth.currentUser?.uid;
-    if (!uid) return;
-    await updateDoc(doc(db, "notifications", uid, "items", id), { read: true });
-  };
+  const itemRef = (id: string) => doc(db, "notifications", uid!, "items", id);
 
-  const markAllAsRead = async () => {
-    const uid = auth.currentUser?.uid;
-    if (!uid) return;
-    await Promise.all(
-      notifications
-        .filter((n) => !n.read)
-        .map((n) =>
-          updateDoc(doc(db, "notifications", uid, "items", n.id), {
-            read: true,
-          }),
-        ),
-    );
-  };
+  const markAsRead = useCallback(
+    async (id: string) => {
+      if (!uid) return;
+      const batch = writeBatch(db);
+      batch.update(itemRef(id), { read: true });
+      await batch.commit();
+    },
+    [uid],
+  );
 
-  const clearNotification = async (id: string) => {
-    const uid = auth.currentUser?.uid;
+  const markAllAsRead = useCallback(async () => {
     if (!uid) return;
-    await deleteDoc(doc(db, "notifications", uid, "items", id));
-  };
+    const unread = notifications.filter((n) => !n.read);
+    if (unread.length === 0) return;
+    const batch = writeBatch(db);
+    unread.forEach((n) => batch.update(itemRef(n.id), { read: true }));
+    await batch.commit();
+  }, [uid, notifications]);
+
+  // Delete one notification.
+  const clearNotification = useCallback(
+    async (id: string) => {
+      if (!uid) return;
+      const batch = writeBatch(db);
+      batch.delete(itemRef(id));
+      await batch.commit();
+    },
+    [uid],
+  );
+
+  // Delete every notification currently loaded (up to 50).
+  const clearAllNotifications = useCallback(async () => {
+    if (!uid || notifications.length === 0) return;
+    const batch = writeBatch(db);
+    notifications.forEach((n) => batch.delete(itemRef(n.id)));
+    await batch.commit();
+  }, [uid, notifications]);
 
   return {
     notifications,
@@ -85,5 +100,6 @@ export function useNotifications() {
     markAsRead,
     markAllAsRead,
     clearNotification,
+    clearAllNotifications,
   };
 }

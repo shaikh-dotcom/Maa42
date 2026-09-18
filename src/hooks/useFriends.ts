@@ -4,6 +4,7 @@ import {
   collection,
   deleteDoc,
   doc,
+  getDoc,
   getDocs,
   limit,
   onSnapshot,
@@ -14,6 +15,7 @@ import {
   where,
 } from "firebase/firestore";
 import { auth, db } from "../firebase";
+import { useAuthUid } from "./useAuthUid";
 import { pairId } from "../utils/ids";
 import { FriendRequest, PublicProfile } from "../types";
 
@@ -83,10 +85,19 @@ export function useFriends() {
   const [incomingRequests, setIncomingRequests] = useState<FriendRequest[]>([]);
   const [outgoingRequests, setOutgoingRequests] = useState<FriendRequest[]>([]);
   const [blocked, setBlocked] = useState<FriendEntry[]>([]);
+  const uid = useAuthUid();
 
   useEffect(() => {
-    const uid = auth.currentUser?.uid;
-    if (!uid) return;
+    if (!uid) {
+      setFriends([]);
+      setIncomingRequests([]);
+      setOutgoingRequests([]);
+      setBlocked([]);
+      return;
+    }
+
+    const onError = (label: string) => (err: unknown) =>
+      console.error(`useFriends: ${label} listener failed`, err);
 
     const unsubFriendships = onSnapshot(
       query(
@@ -107,6 +118,7 @@ export function useFriends() {
         });
         setFriends(list);
       },
+      onError("friendships"),
     );
 
     const unsubIncoming = onSnapshot(
@@ -120,6 +132,7 @@ export function useFriends() {
           snap.docs.map((d) => ({ id: d.id, ...(d.data() as any) })),
         );
       },
+      onError("incoming requests"),
     );
 
     const unsubOutgoing = onSnapshot(
@@ -133,6 +146,7 @@ export function useFriends() {
           snap.docs.map((d) => ({ id: d.id, ...(d.data() as any) })),
         );
       },
+      onError("outgoing requests"),
     );
 
     const unsubBlocked = onSnapshot(
@@ -148,6 +162,7 @@ export function useFriends() {
           }),
         );
       },
+      onError("blocks"),
     );
 
     return () => {
@@ -156,7 +171,7 @@ export function useFriends() {
       unsubOutgoing();
       unsubBlocked();
     };
-  }, []);
+  }, [uid]);
 
   const blockedUids = blocked.map((b) => b.uid);
 
@@ -278,8 +293,6 @@ export function useFriends() {
           read: false,
           createdAt: serverTimestamp(),
         });
-
-        console.log("Notification created successfully");
       } catch (error) {
         console.error("FAILED TO CREATE NOTIFICATION:", error);
       }
@@ -298,26 +311,56 @@ export function useFriends() {
   const acceptFriendRequest = useCallback(async (request: FriendRequest) => {
     const me = auth.currentUser;
     if (!me) return;
+
+    // Create the friendship first so a failure never loses the request.
+    await setDoc(
+      doc(db, "friendships", pairId(request.fromUid, request.toUid)),
+      {
+        participants: [request.fromUid, request.toUid],
+        participantNames: {
+          [request.fromUid]: request.fromName,
+          [request.toUid]: request.toName,
+        },
+        createdAt: serverTimestamp(),
+      },
+    );
+
     await deleteDoc(doc(db, "friendRequests", request.id));
 
-    const fid = pairId(request.fromUid, request.toUid);
-    await setDoc(doc(db, "friendships", fid), {
-      participants: [request.fromUid, request.toUid],
-      participantNames: {
-        [request.fromUid]: request.fromName,
-        [request.toUid]: request.toName,
-      },
-      createdAt: serverTimestamp(),
-    });
-
-    await addDoc(collection(db, "notifications", request.fromUid, "items"), {
-      type: "friend_accept",
-      fromUid: me.uid,
-      fromName: request.toName,
-      read: false,
-      createdAt: serverTimestamp(),
-    });
+    try {
+      await addDoc(collection(db, "notifications", request.fromUid, "items"), {
+        type: "friend_accept",
+        fromUid: me.uid,
+        fromName: request.toName || me.displayName || "A Maa42 member",
+        read: false,
+        createdAt: serverTimestamp(),
+      });
+    } catch (error) {
+      console.error("Failed to notify sender of acceptance:", error);
+    }
   }, []);
+
+  // Accept straight from a notification, without depending on the live
+  // incomingRequests list. Returns false if the request is no longer pending
+  // (cancelled by the sender or already handled).
+  const acceptFriendRequestById = useCallback(
+    async (requestId: string): Promise<boolean> => {
+      const me = auth.currentUser;
+      if (!me) return false;
+      let snap;
+      try {
+        snap = await getDoc(doc(db, "friendRequests", requestId));
+      } catch {
+        return false;
+      }
+      if (!snap.exists()) return false;
+      const data = snap.data() as Omit<FriendRequest, "id">;
+      if (data.toUid !== me.uid || data.status !== "pending") return false;
+      await acceptFriendRequest({ id: snap.id, ...data } as FriendRequest);
+      return true;
+    },
+    [acceptFriendRequest],
+  );
 
   const removeFriend = useCallback(async (otherUid: string) => {
     const me = auth.currentUser;
@@ -361,6 +404,7 @@ export function useFriends() {
     cancelFriendRequest,
     declineFriendRequest,
     acceptFriendRequest,
+    acceptFriendRequestById,
     removeFriend,
     blockUser,
     unblockUser,

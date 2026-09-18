@@ -67,7 +67,7 @@ const BABY_WEEKS: WeekData[] = [
   },
   {
     week: 24,
-    imageUrl: "/week-24.png",
+    imageUrl: "/week24.png",
     sizeLabel: "ear of corn",
     note: "Lungs are developing branching airways.",
   },
