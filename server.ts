@@ -269,6 +269,180 @@ Format as clean, bullet points suitable for a digital health telehealth dashboar
   }
 });
 
+// ---------------------------------------------------------------------------
+// MaterniBot device proxy
+// ---------------------------------------------------------------------------
+// These are the only routes that ever talk to the MaterniBot FastAPI backend.
+// MATERNIBOT_DEVICE_SECRET lives only here, server-side — it is never sent
+// to the browser. The React app calls these /api/bot/* routes with plain
+// relative fetches, exactly like it already does for /api/chat.
+const MATERNIBOT_API_URL =
+  process.env.MATERNIBOT_API_URL || "http://localhost:8000";
+const MATERNIBOT_DEVICE_SECRET = process.env.MATERNIBOT_DEVICE_SECRET || "";
+
+// Wraps fetch with the secret header and a timeout, since the bot backend
+// may simply not be running (it's local-only right now) — we want a quick,
+// clean failure rather than the request hanging.
+async function callBot(
+  path: string,
+  init: RequestInit = {},
+  timeoutMs = 6000,
+): Promise<any> {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    const res = await fetch(`${MATERNIBOT_API_URL}${path}`, {
+      ...init,
+      headers: {
+        ...(init.headers || {}),
+        secret: MATERNIBOT_DEVICE_SECRET,
+      },
+      signal: controller.signal,
+    });
+    const text = await res.text();
+    let data: any = null;
+    try {
+      data = text ? JSON.parse(text) : null;
+    } catch {
+      data = text;
+    }
+    if (!res.ok) {
+      const detail = (data && data.detail) || res.statusText;
+      throw new Error(`MaterniBot backend error (${res.status}): ${detail}`);
+    }
+    return data;
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
+// Lightweight online/offline check — always returns 200 so the dashboard
+// can render a status banner instead of treating "bot is off" as a crash.
+app.get("/api/bot/status", async (_req, res) => {
+  try {
+    await callBot("/health", { method: "GET" }, 4000);
+    res.json({ online: true });
+  } catch (err: any) {
+    res.json({ online: false, error: err?.message || "Bot unreachable" });
+  }
+});
+
+app.get("/api/bot/profile", async (_req, res) => {
+  try {
+    res.json(await callBot("/profile", { method: "GET" }));
+  } catch (err: any) {
+    res.status(502).json({ error: err?.message || "Bot unreachable" });
+  }
+});
+
+app.post("/api/bot/profile", async (req, res) => {
+  try {
+    const { due_date, preferred_lang } = req.body as {
+      due_date?: string;
+      preferred_lang?: string;
+    };
+    if (!due_date) {
+      return res.status(400).json({ error: "due_date is required" });
+    }
+    const data = await callBot("/profile", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        due_date,
+        preferred_lang: preferred_lang || "en",
+      }),
+    });
+    res.json(data);
+  } catch (err: any) {
+    res.status(502).json({ error: err?.message || "Bot unreachable" });
+  }
+});
+
+app.get("/api/bot/sensors/latest", async (_req, res) => {
+  try {
+    res.json(await callBot("/sensors/latest", { method: "GET" }));
+  } catch (err: any) {
+    res.status(502).json({ error: err?.message || "Bot unreachable" });
+  }
+});
+
+app.get("/api/bot/sensors/history", async (req, res) => {
+  try {
+    const limit = req.query.limit ? Number(req.query.limit) : 20;
+    const data = await callBot(
+      `/sensors/history?limit=${encodeURIComponent(limit)}`,
+      { method: "GET" },
+    );
+    res.json(data);
+  } catch (err: any) {
+    res.status(502).json({ error: err?.message || "Bot unreachable" });
+  }
+});
+
+app.get("/api/bot/reminders", async (_req, res) => {
+  try {
+    res.json(await callBot("/reminders/active", { method: "GET" }));
+  } catch (err: any) {
+    res.status(502).json({ error: err?.message || "Bot unreachable" });
+  }
+});
+
+app.post("/api/bot/reminders", async (req, res) => {
+  try {
+    const data = await callBot("/reminders", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(req.body),
+    });
+    res.json(data);
+  } catch (err: any) {
+    res.status(502).json({ error: err?.message || "Bot unreachable" });
+  }
+});
+
+app.patch("/api/bot/reminders/:id/deactivate", async (req, res) => {
+  try {
+    const category = req.query.category as string | undefined;
+    if (!category) {
+      return res
+        .status(400)
+        .json({ error: "category query param is required" });
+    }
+    const data = await callBot(
+      `/reminders/${encodeURIComponent(req.params.id)}/deactivate?category=${encodeURIComponent(category)}`,
+      { method: "PATCH" },
+    );
+    res.json(data);
+  } catch (err: any) {
+    res.status(502).json({ error: err?.message || "Bot unreachable" });
+  }
+});
+
+app.get("/api/bot/symptoms", async (req, res) => {
+  try {
+    const limit = req.query.limit ? Number(req.query.limit) : 50;
+    const data = await callBot(`/symptoms?limit=${encodeURIComponent(limit)}`, {
+      method: "GET",
+    });
+    res.json(data);
+  } catch (err: any) {
+    res.status(502).json({ error: err?.message || "Bot unreachable" });
+  }
+});
+
+app.post("/api/bot/symptoms", async (req, res) => {
+  try {
+    const data = await callBot("/symptoms", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(req.body),
+    });
+    res.json(data);
+  } catch (err: any) {
+    res.status(502).json({ error: err?.message || "Bot unreachable" });
+  }
+});
+
 // Vite middleware setup
 async function startServer() {
   if (process.env.NODE_ENV !== "production") {
@@ -292,5 +466,13 @@ async function startServer() {
 console.log(
   "GROQ_API_KEY loaded:",
   GROQ_API_KEY ? `${GROQ_API_KEY.slice(0, 6)}...` : "MISSING",
+);
+console.log(
+  "MaterniBot backend:",
+  MATERNIBOT_API_URL,
+  "| secret set:",
+  MATERNIBOT_DEVICE_SECRET
+    ? "yes"
+    : "no (set MATERNIBOT_DEVICE_SECRET in .env)",
 );
 startServer();

@@ -15,6 +15,7 @@ import { SophiaScreen } from "./components/SophiaScreen";
 import { TrackerScreen } from "./components/TrackerScreen";
 import { CareCircleScreen } from "./components/CareCircleScreen";
 import { MessagesScreen } from "./components/MessagesScreen";
+import { BotScreen } from "./components/BotScreen";
 import { LoadingScreen } from "./components/LoadingScreen";
 import { AuthModal } from "./components/AuthModal";
 import { SosModal } from "./components/SosModal";
@@ -398,6 +399,18 @@ export const App: React.FC = () => {
                     initialTrackId={pendingTrackId}
                     onClearInitialTrackId={() => setPendingTrackId("")}
                   />
+                </motion.div>
+              )}
+
+              {currentScreen === "bot" && profile && (
+                <motion.div
+                  key="bot"
+                  initial={{ opacity: 0, y: 10 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: -10 }}
+                  transition={{ duration: 0.3 }}
+                >
+                  <BotScreen user={profile} />
                 </motion.div>
               )}
 

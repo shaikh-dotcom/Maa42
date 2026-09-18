@@ -4,7 +4,8 @@ export type ScreenId =
   | "sophia"
   | "tracker"
   | "circle"
-  | "messages";
+  | "messages"
+  | "bot";
 
 export interface ChatMessage {
   id: string;
@@ -131,4 +132,52 @@ export interface AppNotification {
   preview?: string;
   read: boolean;
   createdAt: any;
+}
+
+// ---------------------------------------------------------------------------
+// MaterniBot device dashboard
+// ---------------------------------------------------------------------------
+// Shapes returned by the /api/bot/* proxy routes in server.ts, which mirror
+// what the MaterniBot FastAPI backend returns.
+
+export interface BotProfile {
+  due_date: string | null;
+  preferred_lang: string;
+  pregnancy_week: number;
+}
+
+export interface BotSensorReading {
+  timestamp: string;
+  heart_rate: number | null;
+  spo2: number | null;
+  temperature: number | null;
+  humidity: number | null;
+}
+
+// "medicine" has medicine_name/dose/frequency filled in; the rest
+// ("water" | "vitamin" | "appointment" | "general") only use message.
+export interface BotReminder {
+  id: number;
+  category:
+    | "medicine"
+    | "water"
+    | "vitamin"
+    | "appointment"
+    | "general"
+    | string;
+  message: string;
+  medicine_name?: string | null;
+  dose?: string | null;
+  frequency?: string | null;
+  next_due: string | null;
+  interval_minutes?: number | null;
+  source?: string;
+}
+
+export interface BotSymptomEntry {
+  id: number;
+  timestamp: string;
+  symptom_text: string;
+  severity?: string | null;
+  red_flag: boolean;
 }

@@ -8,6 +8,7 @@ import {
   BookOpen,
   Users,
   MessageCircle,
+  Cpu,
 } from "lucide-react";
 
 interface BottomNavProps {
@@ -25,6 +26,9 @@ export const BottomNav: React.FC<BottomNavProps> = ({
     { id: "home" as ScreenId, label: "Home", icon: Home },
     { id: "sophia" as ScreenId, label: "Sophia", icon: Bot },
     { id: "tracker" as ScreenId, label: "Tracker", icon: TrendingUp },
+    // Cpu (not the Bot icon above) so it reads as "the physical device",
+    // distinct from Sophia, the AI companion.
+    { id: "bot" as ScreenId, label: "MaterniBot", icon: Cpu },
     {
       id: "resources" as const,
       label: "Resources",
@@ -37,7 +41,7 @@ export const BottomNav: React.FC<BottomNavProps> = ({
 
   return (
     <nav className="fixed bottom-0 inset-x-0 z-40 bg-surface/90 backdrop-blur-xl border-t border-surface-container/80 shadow-[0_-2px_16px_rgba(13,92,99,0.06)]">
-      <div className="max-w-lg mx-auto flex justify-around items-center h-20 px-2">
+      <div className="max-w-lg mx-auto flex justify-around items-center h-20 px-1">
         {tabs.map((tab) => {
           const Icon = tab.icon;
           const isActive = !tab.isAction && currentScreen === tab.id;
@@ -53,7 +57,7 @@ export const BottomNav: React.FC<BottomNavProps> = ({
                   onSelectScreen(tab.id as ScreenId);
                 }
               }}
-              className={`relative flex flex-col items-center justify-center gap-1 w-14 h-16 rounded-2xl transition-colors cursor-pointer ${
+              className={`relative flex flex-col items-center justify-center gap-1 w-12 sm:w-14 h-16 rounded-2xl transition-colors cursor-pointer ${
                 isActive
                   ? "text-on-primary-container font-bold"
                   : "text-on-surface-variant hover:text-on-surface"
@@ -68,7 +72,7 @@ export const BottomNav: React.FC<BottomNavProps> = ({
                 />
               )}
               <Icon className="w-5 h-5 relative z-10" />
-              <span className="text-[10px] font-medium tracking-tight relative z-10">
+              <span className="text-[9px] sm:text-[10px] font-medium tracking-tight relative z-10 text-center leading-none">
                 {tab.label}
               </span>
             </motion.button>

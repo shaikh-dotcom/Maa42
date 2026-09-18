@@ -30,6 +30,8 @@ export const Header: React.FC<HeaderProps> = ({
     switch (currentScreen) {
       case "home":
         return "Home Dashboard";
+      case "bot":
+        return "MaterniBot";
       case "sophia":
         return "Sophia AI Chat";
       case "tracker":
